@@ -1,6 +1,9 @@
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate toml;
+extern crate ws;
+
+mod ws_handler;
 
 use std::env;
 use std::fs::File;
@@ -10,11 +13,10 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use hyper::Client;
-
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct CanaryConfig {
-    target: Vec<CanaryTarget>
+    target: Vec<CanaryTarget>,
+    server_listen_address: String
 }
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
@@ -24,7 +26,13 @@ struct CanaryTarget {
     interval_s: u64
 }
 
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct CanaryEvent {
+    payload: String
+}
+
 fn main() {
+    // Read config
     let config_path = match env::args().nth(1) {
         Some(c) => c,
         None => panic!("no configuration file supplied as the first argument")
@@ -35,33 +43,48 @@ fn main() {
         Err(err) => panic!("{} -- Invalid configuration file {}", err, config_path.clone())
     };
 
-    let (tx, rx) = mpsc::channel();
+    // Start polling
+    let (poll_tx, poll_rx) = mpsc::channel();
 
-    for target in config.target {
-        let child_tx = tx.clone();
+    for target in config.clone().target {
+        let child_poll_tx = poll_tx.clone();
 
         thread::spawn(move || {
             loop {
-                let _ = child_tx.send(check_host(target.clone()));
+                let _ = child_poll_tx.send(check_host(target.clone()));
                 thread::sleep(Duration::new(target.interval_s, 0));
             }
         });
     }
 
+    // Start up websocket server
+    let me = ws::WebSocket::new(ws_handler::ClientFactory).unwrap();
+    let broadcaster = me.broadcaster();
+
+    thread::spawn(move || {
+        me.listen(config.server_listen_address.as_str()).unwrap();
+    });
+
+    // Broadcast to all clients
     loop {
-        let result = rx.recv().unwrap();
+        let result = poll_rx.recv().unwrap();
         log_result(result);
+        let _ = broadcaster.send("lol");
     }
 }
 
-fn check_host(config: CanaryTarget) -> Result<(), String> {
-    println!("checking {:#?}", config);
-
-    let response = Client::new().get("http://bgp-ci.ida-gds-demo.com").send();
+fn check_host(_config: CanaryTarget) -> Result<(), String> {
+    let response = hyper::Client::new().get("http://bgp-ci.ida-gds-demo.com").send();
 
     return match response {
-        Ok(_) => Ok(()),
-        Err(_err) => Err("no go".to_owned())
+        Ok(r) => {
+            if r.status == hyper::status::StatusCode::Ok {
+                Ok(())
+            } else {
+                Err(format!("bad status code: {}", r.status))
+            }
+        },
+        Err(err) => Err(format!("failed to poll server: {}", err))
     }
 }
 
@@ -99,6 +122,7 @@ mod tests {
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
+            server_listen_address: "127.0.0.1:8099".to_owned(),
             target: vec!(
                 CanaryTarget {
                     name: "Hello,".to_owned(),
@@ -108,7 +132,7 @@ mod tests {
                 CanaryTarget {
                     name: "foo".to_owned(),
                     host: "bar".to_owned(),
-                    interval_s: 30
+                    interval_s: 5
                 },
             )
         };

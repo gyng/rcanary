@@ -1,3 +1,5 @@
+server_listen_address = "127.0.0.1:8099"
+
 [[target]]
 name = "Hello,"
 host = "world!"
@@ -6,4 +8,4 @@ interval_s = 60
 [[target]]
 name = "foo"
 host = "bar"
-interval_s = 30
+interval_s = 5
