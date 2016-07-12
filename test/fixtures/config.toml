@@ -1,9 +1,9 @@
 [[target]]
 name = "Hello,"
 host = "world!"
-interval_s = 1
+interval_s = 60
 
 [[target]]
 name = "foo"
 host = "bar"
-interval_s = 1
+interval_s = 30

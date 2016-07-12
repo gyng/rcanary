@@ -1,6 +1,8 @@
 # rcanary
 
-(In development) A minimal program to monitor statuses of hosts =.
+[![Build Status](https://travis-ci.org/gyng/rcanary.svg?branch=master)](https://travis-ci.org/gyng/rcanary)
+
+(In development) A minimal program to monitor statuses of hosts.
 
 # Usage
 

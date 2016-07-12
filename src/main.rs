@@ -1,18 +1,16 @@
-
 extern crate hyper;
-extern crate toml;
 extern crate rustc_serialize;
-
-use std::fs::File;
-use std::thread;
-use std::io::Read;
-use std::result::Result;
-use hyper::Client;
+extern crate toml;
 
 use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::result::Result;
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
-use std::sync::mpsc;
+use hyper::Client;
 
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct CanaryConfig {
@@ -102,11 +100,13 @@ mod tests {
             target: vec!(
                 CanaryTarget {
                     name: "Hello,".to_owned(),
-                    host: "world!".to_owned()
+                    host: "world!".to_owned(),
+                    interval_s: 60
                 },
                 CanaryTarget {
                     name: "foo".to_owned(),
-                    host: "bar".to_owned()
+                    host: "bar".to_owned(),
+                    interval_s: 30
                 },
             )
         };
