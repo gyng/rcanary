@@ -25,13 +25,16 @@ struct CanaryTarget {
 }
 
 fn main() {
-    let config_path = env::args().nth(1).unwrap(); // 0th is program name
+    let config_path = match env::args().nth(1) {
+        Some(c) => c,
+        None => panic!("no configuration file supplied as the first argument")
+    };
+
     let config = match read_config(&config_path) {
         Ok(c) => c,
         Err(err) => panic!("{} -- Invalid configuration file {}", err, config_path.clone())
     };
 
-    // let pool = ThreadPool::new(self.tasks);
     let (tx, rx) = mpsc::channel();
 
     for target in config.target {
@@ -66,7 +69,6 @@ fn log_result(result: Result<(), String>) {
     println!("logging! {:?}", result.unwrap());
 }
 
-// TODO: return Result
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
     println!("Reading configuration from `{}`", path);
 
