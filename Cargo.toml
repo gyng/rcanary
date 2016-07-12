@@ -1,0 +1,9 @@
+[package]
+name = "rcanary"
+version = "0.1.0"
+authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
+
+[dependencies]
+hyper = "*"
+toml = "0.1"
+rustc-serialize = "0.3"

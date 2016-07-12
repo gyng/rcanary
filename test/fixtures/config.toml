@@ -1,0 +1,9 @@
+[[target]]
+name = "Hello,"
+host = "world!"
+interval_s = 1
+
+[[target]]
+name = "foo"
+host = "bar"
+interval_s = 1
