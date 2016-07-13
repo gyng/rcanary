@@ -8,7 +8,9 @@ mod ws_handler;
 
 use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
@@ -39,14 +41,12 @@ pub struct CanaryCheck {
 
 fn main() {
     // Read config
-    let config_path = match env::args().nth(1) {
-        Some(c) => c,
-        None => panic!("no configuration file supplied as the first argument")
-    };
+    let config_path = env::args().nth(1)
+        .expect("no configuration file supplied as the first argument");
 
     let config = match read_config(&config_path) {
         Ok(c) => c,
-        Err(err) => panic!("{} -- Invalid configuration file {}", err, config_path.clone())
+        Err(err) => panic!("failed to read configuration file {}: {}", config_path, err)
     };
 
     // Start polling
@@ -110,7 +110,16 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 }
 
 fn log_result(result: &CanaryCheck) {
+    let log_dir = "log";
+    if !Path::new(log_dir).exists() {
+        fs::create_dir(log_dir)
+            .expect("failed to create log directory");
+    }
+
     println!("logging! {:?}", result);
+    let path = PathBuf::from("log/log.txt");
+    let mut f = File::create(path).expect("failed ot open log file for writing");
+    let _ = f.write_all(format!("{:?}", result).as_bytes());
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
