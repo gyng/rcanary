@@ -1,5 +1,6 @@
 extern crate hyper;
 extern crate rustc_serialize;
+extern crate time;
 extern crate toml;
 extern crate ws;
 
@@ -13,22 +14,27 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use rustc_serialize::json;
+
 #[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
 struct CanaryConfig {
     target: Vec<CanaryTarget>,
     server_listen_address: String
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 struct CanaryTarget {
     name: String,
     host: String,
     interval_s: u64
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct CanaryEvent {
-    payload: String
+#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryCheck {
+    target: CanaryTarget,
+    info: String,
+    status_code: String,
+    time: String
 }
 
 fn main() {
@@ -68,28 +74,43 @@ fn main() {
     // Broadcast to all clients
     loop {
         let result = poll_rx.recv().unwrap();
-        log_result(result);
-        let _ = broadcaster.send("lol");
+        log_result(result.clone());
+        println!("{:#?}", result);
+        let _ = broadcaster.send(json::encode(&result).unwrap());
     }
 }
 
-fn check_host(_config: CanaryTarget) -> Result<(), String> {
-    let response = hyper::Client::new().get("http://bgp-ci.ida-gds-demo.com").send();
+fn check_host(target: CanaryTarget) -> CanaryCheck {
+    let response_raw = hyper::Client::new().get(&target.host).send();
+    let time = format!("{}", time::now_utc().rfc3339());
 
-    return match response {
-        Ok(r) => {
-            if r.status == hyper::status::StatusCode::Ok {
-                Ok(())
-            } else {
-                Err(format!("bad status code: {}", r.status))
-            }
-        },
-        Err(err) => Err(format!("failed to poll server: {}", err))
+    if let Err(err) = response_raw {
+        return CanaryCheck {
+            target: target,
+            time: time,
+            info: format!("failed to poll server: {}", err),
+            status_code: "null".to_string()
+        }
+    }
+
+    // Should never panic on unwrap
+    let response = response_raw.unwrap();
+    let info = if response.status.is_success() {
+        "okay".to_string()
+    } else {
+        "no idea".to_string()
+    };
+
+    CanaryCheck {
+        target: target,
+        time: format!("{}", time::now_utc().rfc3339()),
+        info: info,
+        status_code: format!("{}", response.status)
     }
 }
 
-fn log_result(result: Result<(), String>) {
-    println!("logging! {:?}", result.unwrap());
+fn log_result(result: CanaryCheck) {
+    println!("logging! {:?}", result);
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
@@ -111,7 +132,7 @@ fn read_config(path: &str) -> Result<CanaryConfig, String> {
     let config = toml::Value::Table(parsed_toml);
     match toml::decode(config) {
         Some(c) => Ok(c),
-        None => Err("Error while deserializing config".to_owned())
+        None => Err("Error while deserializing config".to_string())
     }
 }
 
@@ -122,16 +143,16 @@ mod tests {
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
-            server_listen_address: "127.0.0.1:8099".to_owned(),
+            server_listen_address: "127.0.0.1:8099".to_string(),
             target: vec!(
                 CanaryTarget {
-                    name: "Hello,".to_owned(),
-                    host: "world!".to_owned(),
+                    name: "Hello,".to_string(),
+                    host: "world!".to_string(),
                     interval_s: 60
                 },
                 CanaryTarget {
-                    name: "foo".to_owned(),
-                    host: "bar".to_owned(),
+                    name: "Google".to_string(),
+                    host: "http://www.google.com".to_string(),
                     interval_s: 5
                 },
             )

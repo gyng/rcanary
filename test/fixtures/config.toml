@@ -6,6 +6,6 @@ host = "world!"
 interval_s = 60
 
 [[target]]
-name = "foo"
-host = "bar"
+name = "Google"
+host = "http://www.google.com"
 interval_s = 5
