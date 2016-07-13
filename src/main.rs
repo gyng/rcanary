@@ -57,7 +57,7 @@ fn main() {
 
         thread::spawn(move || {
             loop {
-                let _ = child_poll_tx.send(check_host(target.clone()));
+                let _ = child_poll_tx.send(check_host(&target));
                 thread::sleep(Duration::new(target.interval_s, 0));
             }
         });
@@ -74,19 +74,19 @@ fn main() {
     // Broadcast to all clients
     loop {
         let result = poll_rx.recv().unwrap();
-        log_result(result.clone());
+        log_result(&result);
         println!("{:#?}", result);
         let _ = broadcaster.send(json::encode(&result).unwrap());
     }
 }
 
-fn check_host(target: CanaryTarget) -> CanaryCheck {
+fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let response_raw = hyper::Client::new().get(&target.host).send();
     let time = format!("{}", time::now_utc().rfc3339());
 
     if let Err(err) = response_raw {
         return CanaryCheck {
-            target: target,
+            target: target.clone(),
             time: time,
             info: format!("failed to poll server: {}", err),
             status_code: "null".to_string()
@@ -102,14 +102,14 @@ fn check_host(target: CanaryTarget) -> CanaryCheck {
     };
 
     CanaryCheck {
-        target: target,
+        target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
         info: info,
         status_code: format!("{}", response.status)
     }
 }
 
-fn log_result(result: CanaryCheck) {
+fn log_result(result: &CanaryCheck) {
     println!("logging! {:?}", result);
 }
 
