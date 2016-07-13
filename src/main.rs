@@ -167,7 +167,7 @@ mod tests {
             )
         };
 
-        let actual = read_config("test/fixtures/config.toml").unwrap();
+        let actual = read_config("tests/fixtures/config.toml").unwrap();
 
         assert_eq!(expected, actual);
     }
