@@ -3,7 +3,8 @@
 
   var serverAddress = 'ws://127.0.0.1:8099';
   var targets = null;
-  var retryHandlerID;
+  var retryHandlerID = null;
+  var staleTimers = {};
 
   function makeConnection (ws) {
     ws.onopen = function () {
@@ -11,11 +12,8 @@
 
       targets = null;
       document.querySelector('#root').innerHTML = '';
-
-      if (retryHandlerID !== null) {
-        clearInterval(retryHandlerID);
-        retryHandlerID = null;
-      }
+      clearInterval(retryHandlerID);
+      retryHandlerID = null;
     };
 
     ws.onerror = function (e) {
@@ -25,7 +23,7 @@
     ws.onclose = function (e) {
       console.log('Connection closed', e);
 
-      if (typeof retryHandlerId === 'undefined' || retryHandlerID === null) {
+      if (retryHandlerID === null) {
         console.log('Starting reconnect process...');
         retryHandlerID = setInterval(function () {
           console.log('Attempting reconnect...');
@@ -46,8 +44,8 @@
         return;
       }
 
-      // First message is the target list
       if (targets === null) {
+        // First message is the target list
         targets = payload;
         var template = document.querySelector('#probe-target');
         var root = document.querySelector('#root');
@@ -59,10 +57,18 @@
           root.appendChild(clone);
         });
       } else {
+        // Update to targets
         var selector = '.probe-target[data-host="' + payload.target.host + '"]';
         var targetEl = document.querySelector(selector);
         var time = new Date(Date.parse(payload.time)).toLocaleString(undefined, { timeZoneName: 'short' });
         targetEl.dataset.status = payload.info;
+        targetEl.dataset.updated = payload.time;
+
+        clearTimeout(staleTimers[payload.target.host]);
+        staleTimers[payload.target.host] = setTimeout(function () {
+          targetEl.dataset.stale = true;
+        }, payload.target.interval_s * 1000 * 2);
+
         targetEl.querySelector('.probe-status').textContent = payload.status_code;
         targetEl.querySelector('.probe-time').textContent = time;
       }
