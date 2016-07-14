@@ -4,10 +4,31 @@
     <title>rcanary dashboard</title>
     <script src="js/rcanary.js"></script>
     <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <link rel="stylesheet" href="css/rcanary.css" />
   </head>
 
   <body>
     <div id="root">
+      <h1>rcanary</h1>
+      awaiting connection to server&hellip;
     </div>
+
+    <template id="probe-target">
+      <div class="probe-target" data-status="unknown">
+        <div class="probe-container">
+          <div class="probe-name">
+            name
+          </div>
+
+          <div class="probe-status">
+            status
+          </div>
+
+          <div class="probe-time">
+            time
+          </div>
+        </div>
+      </div>
+    </template>
   </body>
 </html>

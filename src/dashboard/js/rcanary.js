@@ -2,12 +2,15 @@
   'use strict';
 
   var serverAddress = 'ws://127.0.0.1:8099';
+  var targets = null;
+  var retryHandlerID;
 
   function makeConnection (ws) {
-    var retryHandlerID;
-
     ws.onopen = function () {
       console.log('Connection to ' + serverAddress + ' established');
+
+      targets = null;
+      document.querySelector('#root').innerHTML = '';
 
       if (retryHandlerID !== null) {
         clearInterval(retryHandlerID);
@@ -23,6 +26,7 @@
       console.log('Connection closed', e);
 
       if (typeof retryHandlerId === 'undefined' || retryHandlerID === null) {
+        console.log('Starting reconnect process...');
         retryHandlerID = setInterval(function () {
           console.log('Attempting reconnect...');
           makeConnection(new WebSocket(serverAddress));
@@ -42,7 +46,26 @@
         return;
       }
 
-      document.querySelector('#root').textContent += JSON.stringify(payload);
+      // First message is the target list
+      if (targets === null) {
+        targets = payload;
+        var template = document.querySelector('#probe-target');
+        var root = document.querySelector('#root');
+
+        targets.http.forEach(function (t) {
+          template.content.querySelector('.probe-name').textContent = t.name;
+          template.content.querySelector('.probe-target').dataset.host = t.host;
+          var clone = document.importNode(template.content, true);
+          root.appendChild(clone);
+        });
+      } else {
+        var selector = '.probe-target[data-host="' + payload.target.host + '"]';
+        var targetEl = document.querySelector(selector);
+        var time = new Date(Date.parse(payload.time)).toLocaleString(undefined, { timeZoneName: 'short' });
+        targetEl.dataset.status = payload.info;
+        targetEl.querySelector('.probe-status').textContent = payload.status_code;
+        targetEl.querySelector('.probe-time').textContent = time;
+      }
     };
 
     return ws;

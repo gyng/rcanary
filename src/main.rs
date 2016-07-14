@@ -18,10 +18,15 @@ use std::time::Duration;
 
 use rustc_serialize::json;
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Debug)]
-struct CanaryConfig {
-    target: Vec<CanaryTarget>,
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryConfig {
+    target: CanaryTargetTypes,
     server_listen_address: String
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+struct CanaryTargetTypes {
+    http: Vec<CanaryTarget>
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -52,19 +57,19 @@ fn main() {
     // Start polling
     let (poll_tx, poll_rx) = mpsc::channel();
 
-    for target in config.clone().target {
+    for http_target in config.clone().target.http {
         let child_poll_tx = poll_tx.clone();
 
         thread::spawn(move || {
             loop {
-                let _ = child_poll_tx.send(check_host(&target));
-                thread::sleep(Duration::new(target.interval_s, 0));
+                let _ = child_poll_tx.send(check_host(&http_target));
+                thread::sleep(Duration::new(http_target.interval_s, 0));
             }
         });
     }
 
     // Start up websocket server
-    let me = ws::WebSocket::new(ws_handler::ClientFactory).unwrap();
+    let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() }).unwrap();
     let broadcaster = me.broadcaster();
 
     thread::spawn(move || {
@@ -75,7 +80,7 @@ fn main() {
     loop {
         let result = poll_rx.recv().unwrap();
         log_result(&result);
-        println!("{:#?}", result);
+        // println!("{:#?}", result);
         let _ = broadcaster.send(json::encode(&result).unwrap());
     }
 }
@@ -88,8 +93,8 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         return CanaryCheck {
             target: target.clone(),
             time: time,
-            info: format!("failed to poll server: {}", err),
-            status_code: "null".to_string()
+            info: "unknown".to_string(),
+            status_code: format!("failed to poll server: {}", err)
         }
     }
 
@@ -98,7 +103,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let info = if response.status.is_success() {
         "okay".to_string()
     } else {
-        "no idea".to_string()
+        "fire".to_string()
     };
 
     CanaryCheck {
@@ -116,7 +121,7 @@ fn log_result(result: &CanaryCheck) {
             .expect("failed to create log directory");
     }
 
-    println!("logging! {:?}", result);
+    // println!("logging! {:?}", result);
     let path = PathBuf::from("log/log.txt");
     let mut f = File::create(path).expect("failed ot open log file for writing");
     let _ = f.write_all(format!("{:?}", result).as_bytes());
@@ -147,28 +152,85 @@ fn read_config(path: &str) -> Result<CanaryConfig, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CanaryConfig, CanaryTarget, read_config};
+    extern crate hyper;
+
+    use std::thread;
+    use super::{CanaryConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget, read_config, check_host};
+    use hyper::server::{Server, Request, Response};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
             server_listen_address: "127.0.0.1:8099".to_string(),
-            target: vec!(
-                CanaryTarget {
-                    name: "Hello,".to_string(),
-                    host: "world!".to_string(),
-                    interval_s: 60
-                },
-                CanaryTarget {
-                    name: "Google".to_string(),
-                    host: "http://www.google.com".to_string(),
-                    interval_s: 5
-                },
-            )
+            target: CanaryTargetTypes {
+                http: vec!(
+                    CanaryTarget {
+                        name: "Invalid".to_string(),
+                        host: "Hello, world!".to_string(),
+                        interval_s: 60
+                    },
+                    CanaryTarget {
+                        name: "404".to_string(),
+                        host: "http://www.google.com/404".to_string(),
+                        interval_s: 5
+                    },
+                    CanaryTarget {
+                        name: "Google".to_string(),
+                        host: "https://www.google.com".to_string(),
+                        interval_s: 5
+                    },
+                )
+            }
         };
 
         let actual = read_config("tests/fixtures/config.toml").unwrap();
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn it_checks_invalid_target_hosts() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1
+        };
+
+        let actual = check_host(&target);
+
+        let expected = CanaryCheck {
+            target: target.clone(),
+            time: actual.time.clone(),
+            info: "unknown".to_string(),
+            status_code: "failed to poll server: relative URL without a base".to_string()
+        };
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn it_checks_valid_target_hosts() {
+        thread::spawn(move || {
+            Server::http("0.0.0.0:56473").unwrap().handle(move |_req: Request, res: Response| {
+                res.send(b"I love BGP").unwrap();
+            }).unwrap();
+        });
+
+        let ok_target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "http://0.0.0.0:56473".to_string(),
+            interval_s: 1
+        };
+
+        let ok_actual = check_host(&ok_target);
+
+        let ok_expected = CanaryCheck {
+            target: ok_target.clone(),
+            time: ok_actual.time.clone(),
+            info: "okay".to_string(),
+            status_code: "200 OK".to_string()
+        };
+
+        assert_eq!(ok_expected, ok_actual);
     }
 }

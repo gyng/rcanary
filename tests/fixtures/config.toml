@@ -1,11 +1,16 @@
 server_listen_address = "127.0.0.1:8099"
 
-[[target]]
-name = "Hello,"
-host = "world!"
+[[target.http]]
+name = "Invalid"
+host = "Hello, world!"
 interval_s = 60
 
-[[target]]
+[[target.http]]
+name = "404"
+host = "http://www.google.com/404"
+interval_s = 5
+
+[[target.http]]
 name = "Google"
-host = "http://www.google.com"
+host = "https://www.google.com"
 interval_s = 5
