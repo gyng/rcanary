@@ -10,7 +10,7 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::fs;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
@@ -22,7 +22,8 @@ use rustc_serialize::json;
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
     target: CanaryTargetTypes,
-    server_listen_address: String
+    server_listen_address: String,
+    log_dir_path: String
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -72,15 +73,15 @@ fn main() {
     // Start up websocket server
     let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() }).unwrap();
     let broadcaster = me.broadcaster();
-
+    let config_clone = config.clone();
     thread::spawn(move || {
-        me.listen(config.server_listen_address.as_str()).unwrap();
+        me.listen(config_clone.server_listen_address.as_str()).unwrap();
     });
 
     // Broadcast to all clients
     loop {
         let result = poll_rx.recv().unwrap();
-        log_result(&result);
+        log_result(&config.log_dir_path, &result);
         // println!("{:#?}", result);
         let _ = broadcaster.send(json::encode(&result).unwrap());
     }
@@ -115,16 +116,14 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     }
 }
 
-fn log_result(result: &CanaryCheck) {
-    let log_dir = "log";
-    if !Path::new(log_dir).exists() {
-        fs::create_dir(log_dir)
-            .expect("failed to create log directory");
-    }
+fn log_result(dir_path: &str, result: &CanaryCheck) {
+    let mut path_buf = PathBuf::from(dir_path);
+    fs::create_dir_all(&path_buf).expect(format!("failed to create directory {}", dir_path).as_str());
+    path_buf.push("log.txt");
+    let mut f = OpenOptions::new()
+        .write(true).append(true).create(true)
+        .open(path_buf).expect("failed ot open log file for writing");
 
-    // println!("logging! {:?}", result);
-    let path = PathBuf::from("log/log.txt");
-    let mut f = OpenOptions::new().write(true).append(true).open(path).expect("failed ot open log file for writing");
     let _ = f.write_all(format!("{:?}", result).as_bytes());
 }
 
@@ -162,6 +161,7 @@ mod tests {
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
+            log_dir_path: "log".to_string(),
             server_listen_address: "127.0.0.1:8099".to_string(),
             target: CanaryTargetTypes {
                 http: vec!(
