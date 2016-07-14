@@ -23,6 +23,7 @@ use rustc_serialize::json;
 pub struct CanaryConfig {
     target: CanaryTargetTypes,
     server_listen_address: String,
+    log: bool,
     log_dir_path: String
 }
 
@@ -81,8 +82,11 @@ fn main() {
     // Broadcast to all clients
     loop {
         let result = poll_rx.recv().unwrap();
-        log_result(&config.log_dir_path, &result);
-        // println!("{:#?}", result);
+
+        if config.log {
+            log_result(&config.log_dir_path, &result);
+        }
+
         let _ = broadcaster.send(json::encode(&result).unwrap());
     }
 }
@@ -162,6 +166,7 @@ mod tests {
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
             log_dir_path: "log".to_string(),
+            log: true,
             server_listen_address: "127.0.0.1:8099".to_string(),
             target: CanaryTargetTypes {
                 http: vec!(

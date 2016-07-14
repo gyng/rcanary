@@ -1,4 +1,6 @@
 server_listen_address = "127.0.0.1:8099"
+
+log = true
 log_dir_path = "log"
 
 [[target.http]]
