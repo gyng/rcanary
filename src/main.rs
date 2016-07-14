@@ -7,7 +7,7 @@ extern crate ws;
 mod ws_handler;
 
 use std::env;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -15,6 +15,7 @@ use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
 
 use rustc_serialize::json;
 
@@ -123,7 +124,7 @@ fn log_result(result: &CanaryCheck) {
 
     // println!("logging! {:?}", result);
     let path = PathBuf::from("log/log.txt");
-    let mut f = File::create(path).expect("failed ot open log file for writing");
+    let mut f = OpenOptions::new().write(true).append(true).open(path).expect("failed ot open log file for writing");
     let _ = f.write_all(format!("{:?}", result).as_bytes());
 }
 
