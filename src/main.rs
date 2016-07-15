@@ -235,11 +235,11 @@ mod tests {
             },
             alert: CanaryAlertConfig {
                 enabled: true,
-                alert_email: "everythingisfire@example.com".to_string(),
-                smtp_server: "smtp.google.com".to_string(),
+                alert_email: "rcanary.alert.inbox@gmail.com".to_string(),
+                smtp_server: "smtp.googlemail.com".to_string(),
                 smtp_username: "example@gmail.com".to_string(),
                 smtp_password: "hunter2".to_string(),
-                smtp_port: 465
+                smtp_port: 587
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             targets: CanaryTargetTypes {
