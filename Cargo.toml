@@ -5,7 +5,8 @@ authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
 
 [dependencies]
 hyper = "*"
+lettre = "0.5"
 rustc-serialize = "0.3"
+time = "0.1"
 toml = "0.1"
 ws = "*"
-time = "0.1"

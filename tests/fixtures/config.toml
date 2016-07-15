@@ -2,10 +2,11 @@ server_listen_address = "127.0.0.1:8099"
 
 [alert]
 enabled = true
-smtp_server = "smtp.google.com"
+alert_email = "rcanary.alert.inbox@gmail.com"
+smtp_server = "smtp.googlemail.com"
 smtp_username = "example@gmail.com"
 smtp_password = "hunter2"
-smtp_port = 465
+smtp_port = 587
 
 [log]
 enabled = true

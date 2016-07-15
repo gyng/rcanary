@@ -1,4 +1,5 @@
 extern crate hyper;
+extern crate lettre;
 extern crate rustc_serialize;
 extern crate time;
 extern crate toml;
@@ -16,7 +17,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-
+use lettre::email::EmailBuilder;
+use lettre::transport::EmailTransport;
+use lettre::transport::smtp::{SecurityLevel, SmtpTransportBuilder};
 use rustc_serialize::json;
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -28,6 +31,7 @@ pub struct CanaryLogConfig {
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
     enabled: bool,
+    alert_email: String,
     smtp_server: String,
     smtp_username: String,
     smtp_password: String,
@@ -60,7 +64,8 @@ pub struct CanaryCheck {
     target: CanaryTarget,
     info: String,
     status_code: String,
-    time: String
+    time: String,
+    alert: bool
 }
 
 fn main() {
@@ -97,10 +102,17 @@ fn main() {
 
     // Broadcast to all clients
     loop {
-        let result = poll_rx.recv().unwrap();
+        let result = match poll_rx.recv() {
+            Ok(result) => result,
+            Err(_) => continue
+        };
 
         if config.log.enabled {
             log_result(&config.log.dir_path, &result);
+        }
+
+        if config.alert.enabled && result.alert {
+            let _ = send_alert(&config.alert, &result);
         }
 
         let _ = broadcaster.send(json::encode(&result).unwrap());
@@ -116,7 +128,8 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
             target: target.clone(),
             time: time,
             info: "unknown".to_string(),
-            status_code: format!("failed to poll server: {}", err)
+            status_code: format!("failed to poll server: {}", err),
+            alert: target.alert
         }
     }
 
@@ -132,7 +145,38 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
         info: info,
-        status_code: format!("{}", response.status)
+        status_code: format!("{}", response.status),
+        alert: target.alert
+    }
+}
+
+fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
+    let email = EmailBuilder::new()
+        .to(config.alert_email.as_ref())
+        .from(config.smtp_username.as_ref())
+        .subject(format!("rcanary alert for {}", &result.target.host).as_str())
+        .body(format!("Something has gone terribly wrong:\n{:#?}", result).as_str())
+        .build()
+        .unwrap();
+
+    let mut mailer = SmtpTransportBuilder::new((config.smtp_server.as_str(), config.smtp_port))
+        .unwrap()
+        .hello_name("localhost")
+        .credentials(&config.smtp_username, &config.smtp_password)
+        .security_level(SecurityLevel::AlwaysEncrypt)
+        .smtp_utf8(true)
+        .build();
+
+    match mailer.send(email.clone()) {
+        Ok(_) => {
+            println!("email alert sent to {} for {}", config.alert_email, &result.target.host);
+            Ok(())
+        },
+        Err(err) => {
+            let error_string = format!("failed to send email alert: {}", err);
+            println!("{}", error_string);
+            Err(error_string)
+        }
     }
 }
 
@@ -148,25 +192,25 @@ fn log_result(dir_path: &str, result: &CanaryCheck) {
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
-    println!("Reading configuration from `{}`", path);
+    println!("reading configuration from `{}`...", path);
 
     let mut file = match File::open(&path) {
         Ok(f) => f,
-        Err(err) => return Err(format!("Failed to read file {}", err))
+        Err(err) => return Err(format!("failed to read file {}", err))
     };
 
     let mut config_toml = String::new();
     if let Err(err) = file.read_to_string(&mut config_toml) {
-        return Err(format!("Error reading config: {}", err))
+        return Err(format!("error reading config: {}", err))
     }
 
-    let parsed_toml = toml::Parser::new(&config_toml).parse().unwrap();
-        // .unwrap_or_else(|err| panic!("Error parsing config file: {}", err));
+    let parsed_toml = toml::Parser::new(&config_toml).parse().expect("error parsing config file");
+    println!("configuration read.");
 
     let config = toml::Value::Table(parsed_toml);
     match toml::decode(config) {
         Some(c) => Ok(c),
-        None => Err("Error while deserializing config".to_string())
+        None => Err("error while deserializing config".to_string())
     }
 }
 
@@ -191,6 +235,7 @@ mod tests {
             },
             alert: CanaryAlertConfig {
                 enabled: true,
+                alert_email: "everythingisfire@example.com".to_string(),
                 smtp_server: "smtp.google.com".to_string(),
                 smtp_username: "example@gmail.com".to_string(),
                 smtp_password: "hunter2".to_string(),
@@ -241,7 +286,8 @@ mod tests {
             target: target.clone(),
             time: actual.time.clone(),
             info: "unknown".to_string(),
-            status_code: "failed to poll server: relative URL without a base".to_string()
+            status_code: "failed to poll server: relative URL without a base".to_string(),
+            alert: false
         };
 
         assert_eq!(expected, actual);
@@ -268,7 +314,8 @@ mod tests {
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
             info: "okay".to_string(),
-            status_code: "200 OK".to_string()
+            status_code: "200 OK".to_string(),
+            alert: false
         };
 
         assert_eq!(ok_expected, ok_actual);
