@@ -16,7 +16,7 @@ impl Factory for ClientFactory {
     type Handler = ClientHandler;
 
     fn connection_made(&mut self, ws: Sender) -> ClientHandler {
-        let _ = ws.send(json::encode(&self.config.target).unwrap());
+        let _ = ws.send(json::encode(&self.config.targets).unwrap());
         ClientHandler {}
     }
 

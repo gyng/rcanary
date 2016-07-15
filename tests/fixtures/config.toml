@@ -1,19 +1,30 @@
 server_listen_address = "127.0.0.1:8099"
 
-log = true
-log_dir_path = "log"
+[alert]
+enabled = true
+smtp_server = "smtp.google.com"
+smtp_username = "example@gmail.com"
+smtp_password = "hunter2"
+smtp_port = 465
 
-[[target.http]]
+[log]
+enabled = true
+dir_path = "log"
+
+[[targets.http]]
 name = "Invalid"
 host = "Hello, world!"
 interval_s = 60
+alert = false
 
-[[target.http]]
+[[targets.http]]
 name = "404"
 host = "http://www.google.com/404"
 interval_s = 5
+alert = false
 
-[[target.http]]
+[[targets.http]]
 name = "Google"
 host = "https://www.google.com"
 interval_s = 5
+alert = false

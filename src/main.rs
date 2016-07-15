@@ -20,11 +20,26 @@ use std::time::Duration;
 use rustc_serialize::json;
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryLogConfig {
+    enabled: bool,
+    dir_path: String
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryAlertConfig {
+    enabled: bool,
+    smtp_server: String,
+    smtp_username: String,
+    smtp_password: String,
+    smtp_port: u16
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
-    target: CanaryTargetTypes,
+    targets: CanaryTargetTypes,
     server_listen_address: String,
-    log: bool,
-    log_dir_path: String
+    log: CanaryLogConfig,
+    alert: CanaryAlertConfig
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -36,7 +51,8 @@ struct CanaryTargetTypes {
 struct CanaryTarget {
     name: String,
     host: String,
-    interval_s: u64
+    interval_s: u64,
+    alert: bool
 }
 
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -60,7 +76,7 @@ fn main() {
     // Start polling
     let (poll_tx, poll_rx) = mpsc::channel();
 
-    for http_target in config.clone().target.http {
+    for http_target in config.clone().targets.http {
         let child_poll_tx = poll_tx.clone();
 
         thread::spawn(move || {
@@ -83,8 +99,8 @@ fn main() {
     loop {
         let result = poll_rx.recv().unwrap();
 
-        if config.log {
-            log_result(&config.log_dir_path, &result);
+        if config.log.enabled {
+            log_result(&config.log.dir_path, &result);
         }
 
         let _ = broadcaster.send(json::encode(&result).unwrap());
@@ -159,31 +175,47 @@ mod tests {
     extern crate hyper;
 
     use std::thread;
-    use super::{CanaryConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget, read_config, check_host};
+    use super::{
+        CanaryConfig, CanaryAlertConfig, CanaryLogConfig,
+        CanaryCheck, CanaryTargetTypes, CanaryTarget,
+        read_config, check_host
+    };
     use hyper::server::{Server, Request, Response};
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
         let expected = CanaryConfig {
-            log_dir_path: "log".to_string(),
-            log: true,
+            log: CanaryLogConfig {
+                enabled: true,
+                dir_path: "log".to_string()
+            },
+            alert: CanaryAlertConfig {
+                enabled: true,
+                smtp_server: "smtp.google.com".to_string(),
+                smtp_username: "example@gmail.com".to_string(),
+                smtp_password: "hunter2".to_string(),
+                smtp_port: 465
+            },
             server_listen_address: "127.0.0.1:8099".to_string(),
-            target: CanaryTargetTypes {
+            targets: CanaryTargetTypes {
                 http: vec!(
                     CanaryTarget {
                         name: "Invalid".to_string(),
                         host: "Hello, world!".to_string(),
-                        interval_s: 60
+                        interval_s: 60,
+                        alert: false
                     },
                     CanaryTarget {
                         name: "404".to_string(),
                         host: "http://www.google.com/404".to_string(),
-                        interval_s: 5
+                        interval_s: 5,
+                        alert: false
                     },
                     CanaryTarget {
                         name: "Google".to_string(),
                         host: "https://www.google.com".to_string(),
-                        interval_s: 5
+                        interval_s: 5,
+                        alert: false
                     },
                 )
             }
@@ -199,7 +231,8 @@ mod tests {
         let target = CanaryTarget {
             name: "foo".to_string(),
             host: "invalid".to_string(),
-            interval_s: 1
+            interval_s: 1,
+            alert: false
         };
 
         let actual = check_host(&target);
@@ -225,7 +258,8 @@ mod tests {
         let ok_target = CanaryTarget {
             name: "foo".to_string(),
             host: "http://0.0.0.0:56473".to_string(),
-            interval_s: 1
+            interval_s: 1,
+            alert: false
         };
 
         let ok_actual = check_host(&ok_target);
