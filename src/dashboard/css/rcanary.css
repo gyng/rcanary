@@ -1,3 +1,5 @@
+/* These CSS variables are just here to list the colours */
+/* To support IE they are not used in any CSS variables */
 :root {
   --fire-bg-color: #FF4E50;
   --okay-bg-color: #59A80F;
@@ -16,18 +18,19 @@ html, body{
 
 .probe-target[data-stale="true"] {
   filter: grayscale(90%);
+  -webkit-filter: grayscale(90%);
 }
 
 .probe-target[data-status="unknown"] {
-  background-color: var(--unknown-bg-color);
+  background-color: #F9D423;
 }
 
 .probe-target[data-status="okay"] {
-  background-color: var(--okay-bg-color);
+  background-color: #59A80F;
 }
 
 .probe-target {
-  background-color: var(--fire-bg-color);
+  background-color: #FF4E50;
   color: white;
   flex: 1;
   width: 100%;

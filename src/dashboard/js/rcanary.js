@@ -64,6 +64,7 @@
         targetEl.dataset.status = payload.info;
         targetEl.dataset.updated = payload.time;
 
+        targetEl.dataset.stale = false;
         clearTimeout(staleTimers[payload.target.host]);
         staleTimers[payload.target.host] = setTimeout(function () {
           targetEl.dataset.stale = true;
