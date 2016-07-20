@@ -65,7 +65,8 @@ pub struct CanaryCheck {
     info: String,
     status_code: String,
     time: String,
-    alert: bool
+    alert: bool,
+    need_to_alert: bool
 }
 
 fn main() {
@@ -111,7 +112,7 @@ fn main() {
             log_result(&config.log.dir_path, &result);
         }
 
-        if config.alert.enabled && result.alert {
+        if config.alert.enabled && result.alert && result.need_to_alert {
             let _ = send_alert(&config.alert, &result);
         }
 
@@ -129,16 +130,17 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
             time: time,
             info: "unknown".to_string(),
             status_code: format!("failed to poll server: {}", err),
-            alert: target.alert
+            alert: target.alert,
+            need_to_alert: true
         }
     }
 
     // Should never panic on unwrap
     let response = response_raw.unwrap();
-    let info = if response.status.is_success() {
-        "okay".to_string()
+    let (need_to_alert, info) = if response.status.is_success() {
+        (false, "okay".to_string())
     } else {
-        "fire".to_string()
+        (true, "fire".to_string())
     };
 
     CanaryCheck {
@@ -146,7 +148,8 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         time: format!("{}", time::now_utc().rfc3339()),
         info: info,
         status_code: format!("{}", response.status),
-        alert: target.alert
+        alert: target.alert,
+        need_to_alert: need_to_alert
     }
 }
 
@@ -287,7 +290,8 @@ mod tests {
             time: actual.time.clone(),
             info: "unknown".to_string(),
             status_code: "failed to poll server: relative URL without a base".to_string(),
-            alert: false
+            alert: false,
+            need_to_alert: true
         };
 
         assert_eq!(expected, actual);
@@ -315,7 +319,8 @@ mod tests {
             time: ok_actual.time.clone(),
             info: "okay".to_string(),
             status_code: "200 OK".to_string(),
-            alert: false
+            alert: false,
+            need_to_alert: false
         };
 
         assert_eq!(ok_expected, ok_actual);
