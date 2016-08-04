@@ -94,11 +94,13 @@ fn main() {
     }
 
     // Start up websocket server
-    let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() }).unwrap();
+    let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() })
+        .unwrap_or_else(|err| panic!("failed to start websocket server {}", err));
     let broadcaster = me.broadcaster();
     let config_clone = config.clone();
     thread::spawn(move || {
-        me.listen(config_clone.server_listen_address.as_str()).unwrap();
+        me.listen(config_clone.server_listen_address.as_str())
+            .unwrap_or_else(|err| panic!("failed to start websocket listener {}", err));
     });
 
     // Broadcast to all clients
@@ -116,7 +118,11 @@ fn main() {
             let _ = send_alert(&config.alert, &result);
         }
 
-        let _ = broadcaster.send(json::encode(&result).unwrap());
+        if let Ok(json) = json::encode(&result) {
+            let _ = broadcaster.send(json);
+        } else {
+            println!("failed to encode result into json");
+        }
     }
 }
 
@@ -154,21 +160,23 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 }
 
 fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
-    let email = EmailBuilder::new()
+    let email = try!(EmailBuilder::new()
         .to(config.alert_email.as_ref())
         .from(config.smtp_username.as_ref())
         .subject(format!("rcanary alert for {}", &result.target.host).as_str())
         .body(format!("Something has gone terribly wrong:\n{:#?}", result).as_str())
-        .build()
-        .unwrap();
+        .build());
 
-    let mut mailer = SmtpTransportBuilder::new((config.smtp_server.as_str(), config.smtp_port))
-        .unwrap()
-        .hello_name("localhost")
-        .credentials(&config.smtp_username, &config.smtp_password)
-        .security_level(SecurityLevel::AlwaysEncrypt)
-        .smtp_utf8(true)
-        .build();
+    let transport = SmtpTransportBuilder::new((config.smtp_server.as_str(), config.smtp_port));
+    let mut mailer = match transport {
+        Ok(t) => t
+            .hello_name("localhost")
+            .credentials(&config.smtp_username, &config.smtp_password)
+            .security_level(SecurityLevel::AlwaysEncrypt)
+            .smtp_utf8(true)
+            .build(),
+        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.smtp_server, config.smtp_port, err))
+    };
 
     match mailer.send(email.clone()) {
         Ok(_) => {
@@ -189,7 +197,7 @@ fn log_result(dir_path: &str, result: &CanaryCheck) {
     path_buf.push("log.txt");
     let mut f = OpenOptions::new()
         .write(true).append(true).create(true)
-        .open(path_buf).expect("failed ot open log file for writing");
+        .open(path_buf).expect("failed to open log file for writing");
 
     let _ = f.write_all(format!("{:?}", result).as_bytes());
 }
