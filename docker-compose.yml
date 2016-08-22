@@ -1,0 +1,10 @@
+version: "2.0"
+services:
+  rcanary:
+    build: .
+    environment:
+      TZ: "Asia/Singapore"
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./config:/app/src/config
