@@ -3,6 +3,10 @@ name = "rcanary"
 version = "0.1.0"
 authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
 
+[[bin]]
+name = "rcanary"
+test = true
+
 [dependencies]
 hyper = "*"
 lettre = "0.5"
