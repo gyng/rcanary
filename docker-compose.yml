@@ -5,6 +5,6 @@ services:
     environment:
       TZ: "Asia/Singapore"
     ports:
-      - "8099:"8099"
+      - "8099:8099"
     volumes:
       - ./config:/app/src/config
