@@ -19,6 +19,9 @@ Then, you can run it as such:
 ```bash
 docker build -t rcanary .
 docker run -v /path/to/config:/app/src/config rcanary
+
+# Or use docker-compose
+docker-compose up
 ```
 
 An example dashboard is at `src/dashboard/index.html`.
