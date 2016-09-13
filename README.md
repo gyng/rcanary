@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/gyng/rcanary.svg?branch=master)](https://travis-ci.org/gyng/rcanary)
 
-A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP.
+A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. rcanary exposes a websocket server for dashboards to connect to.
 
 # Usage
 
@@ -10,7 +10,8 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
     cd rcanary
     cargo run --release my_config.toml
 
-Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in `test/fixtures/config.toml`.
+Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in `test/fixtures/config.toml`. [SMTP configuration for Gmail can be found here](https://support.google.com/a/answer/176600
+).
 
 ## Docker
 
@@ -24,7 +25,9 @@ Then, you can run it as such:
     # Or use docker-compose
     docker-compose up
 
-An example dashboard is at `src/dashboard/index.html`.
+## Dashboard
+
+An example dashboard is at `src/dashboard/index.html`. Point `serverAddress` in `rcanary.js` to your rcanary server.
 
 # License
 
