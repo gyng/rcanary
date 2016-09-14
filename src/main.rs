@@ -24,8 +24,10 @@ use rustc_serialize::json;
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryLogConfig {
+    dir_path: String,
     enabled: bool,
-    dir_path: String
+    file: bool,
+    stdout: bool
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -111,7 +113,7 @@ fn main() {
         };
 
         if config.log.enabled {
-            log_result(&config.log.dir_path, &result);
+            log_result(&config.log, &result);
         }
 
         if config.alert.enabled && result.alert && result.need_to_alert {
@@ -191,15 +193,23 @@ fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), St
     }
 }
 
-fn log_result(dir_path: &str, result: &CanaryCheck) {
-    let mut path_buf = PathBuf::from(dir_path);
-    fs::create_dir_all(&path_buf).expect(format!("failed to create directory {}", dir_path).as_str());
-    path_buf.push("log.txt");
-    let mut f = OpenOptions::new()
-        .write(true).append(true).create(true)
-        .open(path_buf).expect("failed to open log file for writing");
+fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
+    let log_text = format!("{:?}", result);
 
-    let _ = f.write_all(format!("{:?}", result).as_bytes());
+    if config.file {
+        let mut path_buf = PathBuf::from(&config.dir_path);
+        fs::create_dir_all(&path_buf).expect(format!("failed to create directory {}", config.dir_path).as_str());
+        path_buf.push("log.txt");
+        let mut f = OpenOptions::new()
+            .write(true).append(true).create(true)
+            .open(path_buf).expect("failed to open log file for writing");
+
+        let _ = f.write_all(log_text.as_bytes());
+    }
+
+    if config.stdout {
+        println!("{}", log_text);
+    }
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
@@ -242,7 +252,9 @@ mod tests {
         let expected = CanaryConfig {
             log: CanaryLogConfig {
                 enabled: true,
-                dir_path: "log".to_string()
+                dir_path: "log".to_string(),
+                file: false,
+                stdout: true
             },
             alert: CanaryAlertConfig {
                 enabled: true,

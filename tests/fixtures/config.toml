@@ -9,8 +9,10 @@ smtp_password = "hunter2"
 smtp_port = 587
 
 [log]
-enabled = true
 dir_path = "log"
+enabled = true
+file = false
+stdout = true
 
 [[targets.http]]
 name = "Invalid"
