@@ -2,6 +2,7 @@ version: "2.0"
 services:
   rcanary:
     build: .
+    restart: always
     environment:
       TZ: "Asia/Singapore"
     ports:
