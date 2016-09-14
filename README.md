@@ -15,7 +15,7 @@ Configure settings and the targets to probe in the configuration toml passed in 
 
 ## Docker
 
-By default, the image will mount a volume at `/app/src/config` and use `/app/src/config/config.toml`.
+By default, the image will mount a volume at `/app/src/config` and use `/app/src/config/config.toml`. Note that the configuration file is assumed to be at `config/config.toml`.
 
 Then, you can run it as such:
 
