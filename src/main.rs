@@ -105,6 +105,9 @@ fn main() {
             .unwrap_or_else(|err| panic!("failed to start websocket listener {}", err));
     });
 
+    // Create string reference to previous status code.
+    let mut previous_status_code = "".to_string();
+
     // Broadcast to all clients
     loop {
         let result = match poll_rx.recv() {
@@ -116,9 +119,11 @@ fn main() {
             log_result(&config.log, &result);
         }
 
-        if config.alert.enabled && result.alert && result.need_to_alert {
+        if config.alert.enabled && result.alert && result.need_to_alert && (previous_status_code != result.status_code) {
             let _ = send_alert(&config.alert, &result);
         }
+
+        previous_status_code = result.status_code.to_string();
 
         if let Ok(json) = json::encode(&result) {
             let _ = broadcaster.send(json);
