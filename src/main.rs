@@ -120,9 +120,9 @@ fn main() {
             log_result(&config.log, &result);
         }
 
-        let is_not_spam = check_not_spam(&mut last_statuses, &result);
+        let is_spam = check_spam(&mut last_statuses, &result);
 
-        if config.alert.enabled && result.alert && result.need_to_alert && is_not_spam {
+        if config.alert.enabled && result.alert && result.need_to_alert && !is_spam {
             let _ = send_alert(&config.alert, &result);
         }
 
@@ -169,19 +169,19 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 
 
 /*
-    Checks if alert would not be spam.
-    Alert would not be spam iff state changes from "okay" to "fire" or "fire" to "okay".
+    Checks if alert would be spam.
+    Alert would be spam iff state does not change from "okay" to "fire" or "fire" to "okay".
     Updates HashMap last_statuses with last state seen for the target.
 */
-fn check_not_spam(last_statuses: &mut HashMap<CanaryTarget, String>, result: &CanaryCheck) -> bool {
-    let not_spam = match last_statuses.get(&result.target) {
+fn check_spam(last_statuses: &mut HashMap<CanaryTarget, String>, result: &CanaryCheck) -> bool {
+    let is_spam = match last_statuses.get(&result.target) {
         Some(status) => {
-            (status == "okay" && result.info == "fire") || (status == "fire" && result.info == "okay")
+            !((status == "okay" && result.info == "fire") || (status == "fire" && result.info == "okay"))
         },
-        None => false
+        None => true
     };
     last_statuses.insert(result.target.clone(), result.info.clone());
-    return not_spam;
+    return is_spam;
 }
 
 fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
@@ -267,7 +267,7 @@ mod tests {
     use super::{
         CanaryConfig, CanaryAlertConfig, CanaryLogConfig,
         CanaryCheck, CanaryTargetTypes, CanaryTarget,
-        read_config, check_host, check_not_spam
+        read_config, check_host, check_spam
     };
     use hyper::server::{Server, Request, Response};
 
@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn it_checks_for_spam_alerts() {
+    fn it_marks_as_spam_on_empty_history() {
         let target = CanaryTarget {
             name: "foo".to_string(),
             host: "invalid".to_string(),
@@ -388,6 +388,22 @@ mod tests {
             need_to_alert: false
         };
 
+        let mut last_statuses = HashMap::new();
+        let empty_actual = check_spam(&mut last_statuses, &ok_result);
+        let empty_expected = true;
+        assert_eq!(empty_expected, empty_actual);
+    }
+
+    #[test]
+    fn it_does_not_mark_as_spam_on_change_from_okay_to_fire() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
+
+
         let fire_result = CanaryCheck {
             target: target.clone(),
             time: "2016-10-14T08:00:00Z".to_string(),
@@ -395,49 +411,112 @@ mod tests {
             status_code: "401 Unauthorized".to_string(),
             alert: true,
             need_to_alert: true
-         };
+        };
 
         let mut last_statuses = HashMap::new();
-
-        // Case: No previous statuses.
-        let empty_actual = check_not_spam(&mut last_statuses, &ok_result);
-        let empty_expected = false;
-        assert_eq!(empty_expected, empty_actual);
-        last_statuses.clear();
-
-        // Case: Okay to Okay.
         last_statuses.insert(target.clone(), "okay".to_string());
-        let ok_to_ok_actual = check_not_spam(&mut last_statuses, &ok_result);
-        let ok_to_ok_expected = false;
-        assert_eq!(ok_to_ok_expected, ok_to_ok_actual);
-        last_statuses.clear();
-
-        // Case: Okay to Fire.
-        last_statuses.insert(target.clone(), "okay".to_string());
-        let ok_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
-        let ok_to_fire_expected = true;
+        let ok_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
+        let ok_to_fire_expected = false;
         assert_eq!(ok_to_fire_expected, ok_to_fire_actual);
-        last_statuses.clear();
+    }
 
-        // Case: Fire to Okay.
-        last_statuses.insert(target.clone(), "fire".to_string());
-        let fire_to_ok_actual = check_not_spam(&mut last_statuses, &ok_result);
-        let fire_to_ok_expected = true;
-        assert_eq!(fire_to_ok_expected, fire_to_ok_actual);
-        last_statuses.clear();
+    #[test]
+    fn it_marks_as_spam_on_continued_okay() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
 
-        // Case: Fire to Fire.
+        let ok_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "okay".to_string(),
+            status_code: "200 OK".to_string(),
+            alert: true,
+            need_to_alert: false
+        };
+
+        let mut last_statuses = HashMap::new();
+        last_statuses.insert(target.clone(), "okay".to_string());
+        let ok_to_ok_actual = check_spam(&mut last_statuses, &ok_result);
+        let ok_to_ok_expected = true;
+        assert_eq!(ok_to_ok_expected, ok_to_ok_actual);
+    }
+
+    #[test]
+    fn it_marks_as_spam_on_continued_fire() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
+
+        let fire_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "fire".to_string(),
+            status_code: "401 Unauthorized".to_string(),
+            alert: true,
+            need_to_alert: true
+        };
+
+        let mut last_statuses = HashMap::new();
         last_statuses.insert(target.clone(), "fire".to_string());
-        let fire_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
-        let fire_to_fire_expected = false;
+        let fire_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
+        let fire_to_fire_expected = true;
         assert_eq!(fire_to_fire_expected, fire_to_fire_actual);
-        last_statuses.clear();
+    }
 
-        // Case: Unknown to Fire.
+    #[test]
+    fn it_does_not_mark_as_spam_on_change_from_fire_to_okay() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
+
+        let ok_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "okay".to_string(),
+            status_code: "200 OK".to_string(),
+            alert: true,
+            need_to_alert: false
+        };
+
+        let mut last_statuses = HashMap::new();
+        last_statuses.insert(target.clone(), "fire".to_string());
+        let fire_to_ok_actual = check_spam(&mut last_statuses, &ok_result);
+        let fire_to_ok_expected = false;
+        assert_eq!(fire_to_ok_expected, fire_to_ok_actual);
+    }
+
+    #[test]
+    fn it_marks_as_spam_on_change_from_unknown_to_fire() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
+
+        let fire_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "fire".to_string(),
+            status_code: "401 Unauthorized".to_string(),
+            alert: true,
+            need_to_alert: true
+        };
+
+        let mut last_statuses = HashMap::new();
         last_statuses.insert(target.clone(), "unknown".to_string());
-        let unk_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
-        let unk_to_fire_expected = false;
+        let unk_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
+        let unk_to_fire_expected = true;
         assert_eq!(unk_to_fire_expected, unk_to_fire_actual);
-        last_statuses.clear();
     }
 }
