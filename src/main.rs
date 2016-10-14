@@ -130,7 +130,9 @@ fn main() {
         let is_spam = check_spam(&mut last_statuses, &result);
 
         if config.alert.enabled && result.alert && result.need_to_alert && !is_spam {
-            let _ = send_alert(&config.alert, &result);
+            let child_config = config.clone();
+            let child_result = result.clone();
+            thread::spawn(move || { send_alert(&child_config.alert, &child_result) });
         }
 
         if let Ok(json) = json::encode(&result) {
@@ -190,7 +192,7 @@ fn check_spam(last_statuses: &mut HashMap<CanaryTarget, Status>, result: &Canary
     is_spam
 }
 
-fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
+fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String> {
     let email = try!(EmailBuilder::new()
         .to(config.alert_email.as_ref())
         .from(config.smtp_username.as_ref())
