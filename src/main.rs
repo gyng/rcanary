@@ -8,6 +8,7 @@ extern crate ws;
 mod ws_handler;
 
 use std::env;
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::fs;
 use std::io::{Read, Write};
@@ -53,7 +54,7 @@ struct CanaryTargetTypes {
     http: Vec<CanaryTarget>
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
 struct CanaryTarget {
     name: String,
     host: String,
@@ -80,6 +81,9 @@ fn main() {
         Ok(c) => c,
         Err(err) => panic!("failed to read configuration file {}: {}", config_path, err)
     };
+
+    // Setup map to save results
+    let mut last_statuses = HashMap::new();
 
     // Start polling
     let (poll_tx, poll_rx) = mpsc::channel();
@@ -116,7 +120,9 @@ fn main() {
             log_result(&config.log, &result);
         }
 
-        if config.alert.enabled && result.alert && result.need_to_alert {
+        let is_not_spam = check_not_spam(&mut last_statuses, &result);
+
+        if config.alert.enabled && result.alert && result.need_to_alert && is_not_spam {
             let _ = send_alert(&config.alert, &result);
         }
 
@@ -159,6 +165,23 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         alert: target.alert,
         need_to_alert: need_to_alert
     }
+}
+
+
+/*
+    Checks if alert would not be spam.
+    Alert would not be spam iff state changes from "okay" to "fire" or "fire" to "okay".
+    Updates HashMap last_statuses with last state seen for the target.
+*/
+fn check_not_spam(last_statuses: &mut HashMap<CanaryTarget, String>, result: &CanaryCheck) -> bool {
+    let not_spam = match last_statuses.get(&result.target) {
+        Some(status) => {
+            (status == "okay" && result.info == "fire") || (status == "fire" && result.info == "okay")
+        },
+        None => false
+    };
+    last_statuses.insert(result.target.clone(), result.info.clone());
+    return not_spam;
 }
 
 fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
@@ -239,11 +262,12 @@ fn read_config(path: &str) -> Result<CanaryConfig, String> {
 mod tests {
     extern crate hyper;
 
+    use std::collections::HashMap;
     use std::thread;
     use super::{
         CanaryConfig, CanaryAlertConfig, CanaryLogConfig,
         CanaryCheck, CanaryTargetTypes, CanaryTarget,
-        read_config, check_host
+        read_config, check_host, check_not_spam
     };
     use hyper::server::{Server, Request, Response};
 
@@ -344,5 +368,76 @@ mod tests {
         };
 
         assert_eq!(ok_expected, ok_actual);
+    }
+
+    #[test]
+    fn it_checks_for_spam_alerts() {
+        let target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        };
+
+        let ok_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "okay".to_string(),
+            status_code: "200 OK".to_string(),
+            alert: true,
+            need_to_alert: false
+        };
+
+        let fire_result = CanaryCheck {
+            target: target.clone(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            info: "fire".to_string(),
+            status_code: "401 Unauthorized".to_string(),
+            alert: true,
+            need_to_alert: true
+         };
+
+        let mut last_statuses = HashMap::new();
+
+        // Case: No previous statuses.
+        let empty_actual = check_not_spam(&mut last_statuses, &ok_result);
+        let empty_expected = false;
+        assert_eq!(empty_expected, empty_actual);
+        last_statuses.clear();
+
+        // Case: Okay to Okay.
+        last_statuses.insert(target.clone(), "okay".to_string());
+        let ok_to_ok_actual = check_not_spam(&mut last_statuses, &ok_result);
+        let ok_to_ok_expected = false;
+        assert_eq!(ok_to_ok_expected, ok_to_ok_actual);
+        last_statuses.clear();
+
+        // Case: Okay to Fire.
+        last_statuses.insert(target.clone(), "okay".to_string());
+        let ok_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
+        let ok_to_fire_expected = true;
+        assert_eq!(ok_to_fire_expected, ok_to_fire_actual);
+        last_statuses.clear();
+
+        // Case: Fire to Okay.
+        last_statuses.insert(target.clone(), "fire".to_string());
+        let fire_to_ok_actual = check_not_spam(&mut last_statuses, &ok_result);
+        let fire_to_ok_expected = true;
+        assert_eq!(fire_to_ok_expected, fire_to_ok_actual);
+        last_statuses.clear();
+
+        // Case: Fire to Fire.
+        last_statuses.insert(target.clone(), "fire".to_string());
+        let fire_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
+        let fire_to_fire_expected = false;
+        assert_eq!(fire_to_fire_expected, fire_to_fire_actual);
+        last_statuses.clear();
+
+        // Case: Unknown to Fire.
+        last_statuses.insert(target.clone(), "unknown".to_string());
+        let unk_to_fire_actual = check_not_spam(&mut last_statuses, &fire_result);
+        let unk_to_fire_expected = false;
+        assert_eq!(unk_to_fire_expected, unk_to_fire_actual);
+        last_statuses.clear();
     }
 }
