@@ -61,7 +61,7 @@
         var selector = '.probe-target[data-host="' + payload.target.host + '"]';
         var targetEl = document.querySelector(selector);
         var time = new Date(Date.parse(payload.time)).toLocaleString(undefined, { timeZoneName: 'short' });
-        targetEl.dataset.status = payload.info;
+        targetEl.dataset.status = payload.status;
         targetEl.dataset.updated = payload.time;
 
         targetEl.dataset.stale = false;

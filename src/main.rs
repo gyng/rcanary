@@ -65,7 +65,7 @@ struct CanaryTarget {
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryCheck {
     target: CanaryTarget,
-    info: Status,
+    status: Status,
     status_code: String,
     time: String,
     alert: bool,
@@ -129,7 +129,7 @@ fn main() {
 
         let is_spam = check_spam(&last_statuses, &result);
         let is_fixed = check_fixed(&last_statuses, &result);
-        last_statuses.insert(result.target.clone(), result.info.clone());
+        last_statuses.insert(result.target.clone(), result.status.clone());
 
         if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
             println!("Sending alert for {:?}", result);
@@ -154,7 +154,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         return CanaryCheck {
             target: target.clone(),
             time: time,
-            info: Status::Unknown,
+            status: Status::Unknown,
             status_code: format!("failed to poll server: {}", err),
             alert: target.alert,
             need_to_alert: true
@@ -163,7 +163,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 
     // Should never panic on unwrap
     let response = response_raw.unwrap();
-    let (need_to_alert, info) = if response.status.is_success() {
+    let (need_to_alert, status) = if response.status.is_success() {
         (false, Status::Okay)
     } else {
         (true, Status::Fire)
@@ -172,7 +172,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
-        info: info,
+        status: status,
         status_code: format!("{}", response.status),
         alert: target.alert,
         need_to_alert: need_to_alert
@@ -185,13 +185,13 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 */
 fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
     match last_statuses.get(&result.target) {
-        Some(status) => status == &result.info,
+        Some(status) => status == &result.status,
         _ => false
     }
 }
 
 fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
-    match (last_statuses.get(&result.target), &result.info) {
+    match (last_statuses.get(&result.target), &result.status) {
         (Some(&Status::Fire), &Status::Okay) |
         (Some(&Status::Unknown), &Status::Okay) => {
             true
@@ -300,7 +300,7 @@ mod tests {
         CanaryCheck {
             target: target(),
             time: "2016-10-14T08:00:00Z".to_string(),
-            info: Status::Okay,
+            status: Status::Okay,
             status_code: "200 OK".to_string(),
             alert: true,
             need_to_alert: true
@@ -311,7 +311,7 @@ mod tests {
         CanaryCheck {
             target: target(),
             time: "2016-10-14T08:00:00Z".to_string(),
-            info: Status::Fire,
+            status: Status::Fire,
             status_code: "401 Unauthorized".to_string(),
             alert: true,
             need_to_alert: true
@@ -372,7 +372,7 @@ mod tests {
         let expected = CanaryCheck {
             target: target(),
             time: actual.time.clone(),
-            info: Status::Unknown,
+            status: Status::Unknown,
             status_code: "failed to poll server: relative URL without a base".to_string(),
             alert: false,
             need_to_alert: true
@@ -401,7 +401,7 @@ mod tests {
         let ok_expected = CanaryCheck {
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            info: Status::Okay,
+            status: Status::Okay,
             status_code: "200 OK".to_string(),
             alert: false,
             need_to_alert: false

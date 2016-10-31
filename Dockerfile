@@ -1,4 +1,4 @@
-FROM lawliet89/debian-rust:1.12.0
+FROM lawliet89/debian-rust:1.12.1
 
 COPY Cargo.toml Cargo.lock ./
 RUN cargo fetch
