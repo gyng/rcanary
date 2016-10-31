@@ -132,16 +132,16 @@ fn main() {
         last_statuses.insert(result.target.clone(), result.status.clone());
 
         if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
-            println!("Sending alert for {:?}", result);
+            log(&config.log, &format!("Sending alert for {:?}", result));
             let child_config = config.clone();
             let child_result = result.clone();
-            thread::spawn(move || { send_alert(&child_config.alert, &child_result) });
+            thread::spawn(move || { send_alert(&child_config, &child_result) });
         }
 
         if let Ok(json) = json::encode(&result) {
             let _ = broadcaster.send(json);
         } else {
-            println!("failed to encode result into json");
+            log(&config.log, &format!("failed to encode result into json"));
         }
     }
 }
@@ -200,41 +200,39 @@ fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryChe
     }
 }
 
-fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String> {
+fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String> {
     let email = try!(EmailBuilder::new()
-        .to(config.alert_email.as_ref())
-        .from(config.smtp_username.as_ref())
+        .to(config.alert.alert_email.as_ref())
+        .from(config.alert.smtp_username.as_ref())
         .subject(format!("rcanary alert for {}", &result.target.host).as_str())
         .body(format!("Something has gone terribly wrong:\n{:#?}", result).as_str())
         .build());
 
-    let transport = SmtpTransportBuilder::new((config.smtp_server.as_str(), config.smtp_port));
+    let transport = SmtpTransportBuilder::new((config.alert.smtp_server.as_str(), config.smtp_port));
     let mut mailer = match transport {
         Ok(t) => t
             .hello_name("localhost")
-            .credentials(&config.smtp_username, &config.smtp_password)
+            .credentials(&config.smtp_username, &config.alert.smtp_password)
             .security_level(SecurityLevel::AlwaysEncrypt)
             .smtp_utf8(true)
             .build(),
-        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.smtp_server, config.smtp_port, err))
+        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.alert.smtp_server, config.alert.smtp_port, err))
     };
 
     match mailer.send(email.clone()) {
         Ok(_) => {
-            println!("email alert sent to {} for {}", config.alert_email, &result.target.host);
+            log(&config.log, &format!("email alert sent to {} for {}", config.alert.alert_email, &result.target.host));
             Ok(())
         },
         Err(err) => {
             let error_string = format!("failed to send email alert: {}", err);
-            println!("{}", error_string);
+            log(&config.log, &format!("{}", error_string));
             Err(error_string)
         }
     }
 }
 
-fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
-    let log_text = format!("{:?}", result);
-
+fn log(config: &CanaryLogConfig, log_text: &str) {
     if config.file {
         let mut path_buf = PathBuf::from(&config.dir_path);
         fs::create_dir_all(&path_buf).expect(format!("failed to create directory {}", config.dir_path).as_str());
@@ -249,6 +247,10 @@ fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
     if config.stdout {
         println!("{}", log_text);
     }
+}
+
+fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
+    log(config, &format!("{:?}", result));
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
