@@ -208,11 +208,11 @@ fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String>
         .body(format!("Something has gone terribly wrong:\n{:#?}", result).as_str())
         .build());
 
-    let transport = SmtpTransportBuilder::new((config.alert.smtp_server.as_str(), config.smtp_port));
+    let transport = SmtpTransportBuilder::new((config.alert.smtp_server.as_str(), config.alert.smtp_port));
     let mut mailer = match transport {
         Ok(t) => t
             .hello_name("localhost")
-            .credentials(&config.smtp_username, &config.alert.smtp_password)
+            .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
             .security_level(SecurityLevel::AlwaysEncrypt)
             .smtp_utf8(true)
             .build(),
