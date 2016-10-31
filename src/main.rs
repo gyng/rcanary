@@ -65,11 +65,18 @@ struct CanaryTarget {
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryCheck {
     target: CanaryTarget,
-    info: String,
+    status: Status,
     status_code: String,
     time: String,
     alert: bool,
     need_to_alert: bool
+}
+
+#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+pub enum Status {
+    Okay,
+    Fire,
+    Unknown
 }
 
 fn main() {
@@ -120,16 +127,21 @@ fn main() {
             log_result(&config.log, &result);
         }
 
-        let is_spam = check_spam(&mut last_statuses, &result);
+        let is_spam = check_spam(&last_statuses, &result);
+        let is_fixed = check_fixed(&last_statuses, &result);
+        last_statuses.insert(result.target.clone(), result.status.clone());
 
-        if config.alert.enabled && result.alert && result.need_to_alert && !is_spam {
-            let _ = send_alert(&config.alert, &result);
+        if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
+            log(&config.log, &format!("Sending alert for {:?}", result));
+            let child_config = config.clone();
+            let child_result = result.clone();
+            thread::spawn(move || { send_alert(&child_config, &child_result) });
         }
 
         if let Ok(json) = json::encode(&result) {
             let _ = broadcaster.send(json);
         } else {
-            println!("failed to encode result into json");
+            log(&config.log, &format!("failed to encode result into json"));
         }
     }
 }
@@ -142,7 +154,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         return CanaryCheck {
             target: target.clone(),
             time: time,
-            info: "unknown".to_string(),
+            status: Status::Unknown,
             status_code: format!("failed to poll server: {}", err),
             alert: target.alert,
             need_to_alert: true
@@ -151,74 +163,76 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 
     // Should never panic on unwrap
     let response = response_raw.unwrap();
-    let (need_to_alert, info) = if response.status.is_success() {
-        (false, "okay".to_string())
+    let (need_to_alert, status) = if response.status.is_success() {
+        (false, Status::Okay)
     } else {
-        (true, "fire".to_string())
+        (true, Status::Fire)
     };
 
     CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
-        info: info,
+        status: status,
         status_code: format!("{}", response.status),
         alert: target.alert,
         need_to_alert: need_to_alert
     }
 }
 
-
 /*
     Checks if alert would be spam.
-    Alert would be spam iff state does not change from "okay" to "fire" or "fire" to "okay".
-    Updates HashMap last_statuses with last state seen for the target.
+    Alert would be spam if state has not changed since last poll
 */
-fn check_spam(last_statuses: &mut HashMap<CanaryTarget, String>, result: &CanaryCheck) -> bool {
-    let is_spam = match last_statuses.get(&result.target) {
-        Some(status) => {
-            !((status == "okay" && result.info == "fire") || (status == "fire" && result.info == "okay"))
-        },
-        None => true
-    };
-    last_statuses.insert(result.target.clone(), result.info.clone());
-    return is_spam;
+fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
+    match last_statuses.get(&result.target) {
+        Some(status) => status == &result.status,
+        _ => false
+    }
 }
 
-fn send_alert(config: &CanaryAlertConfig, result: &CanaryCheck) -> Result<(), String>{
+fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
+    match (last_statuses.get(&result.target), &result.status) {
+        (Some(&Status::Fire), &Status::Okay) |
+        (Some(&Status::Unknown), &Status::Okay) => {
+            true
+        },
+        _ => false
+    }
+}
+
+fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String> {
     let email = try!(EmailBuilder::new()
-        .to(config.alert_email.as_ref())
-        .from(config.smtp_username.as_ref())
+        .to(config.alert.alert_email.as_ref())
+        .from(config.alert.smtp_username.as_ref())
         .subject(format!("rcanary alert for {}", &result.target.host).as_str())
         .body(format!("Something has gone terribly wrong:\n{:#?}", result).as_str())
         .build());
 
-    let transport = SmtpTransportBuilder::new((config.smtp_server.as_str(), config.smtp_port));
+    let transport = SmtpTransportBuilder::new((config.alert.smtp_server.as_str(), config.alert.smtp_port));
     let mut mailer = match transport {
         Ok(t) => t
             .hello_name("localhost")
-            .credentials(&config.smtp_username, &config.smtp_password)
+            .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
             .security_level(SecurityLevel::AlwaysEncrypt)
             .smtp_utf8(true)
             .build(),
-        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.smtp_server, config.smtp_port, err))
+        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.alert.smtp_server, config.alert.smtp_port, err))
     };
 
     match mailer.send(email.clone()) {
         Ok(_) => {
-            println!("email alert sent to {} for {}", config.alert_email, &result.target.host);
+            log(&config.log, &format!("email alert sent to {} for {}", config.alert.alert_email, &result.target.host));
             Ok(())
         },
         Err(err) => {
             let error_string = format!("failed to send email alert: {}", err);
-            println!("{}", error_string);
+            log(&config.log, &format!("{}", error_string));
             Err(error_string)
         }
     }
 }
 
-fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
-    let log_text = format!("{:?}", result);
-
+fn log(config: &CanaryLogConfig, log_text: &str) {
     if config.file {
         let mut path_buf = PathBuf::from(&config.dir_path);
         fs::create_dir_all(&path_buf).expect(format!("failed to create directory {}", config.dir_path).as_str());
@@ -233,6 +247,10 @@ fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
     if config.stdout {
         println!("{}", log_text);
     }
+}
+
+fn log_result(config: &CanaryLogConfig, result: &CanaryCheck) {
+    log(config, &format!("{:?}", result));
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, String> {
@@ -266,10 +284,41 @@ mod tests {
     use std::thread;
     use super::{
         CanaryConfig, CanaryAlertConfig, CanaryLogConfig,
-        CanaryCheck, CanaryTargetTypes, CanaryTarget,
-        read_config, check_host, check_spam
+        CanaryCheck, CanaryTargetTypes, CanaryTarget, Status,
+        read_config, check_host, check_spam, check_fixed
     };
     use hyper::server::{Server, Request, Response};
+
+    fn target() -> CanaryTarget {
+        CanaryTarget {
+            name: "foo".to_string(),
+            host: "invalid".to_string(),
+            interval_s: 1,
+            alert: false
+        }
+    }
+
+    fn okay_result() -> CanaryCheck {
+        CanaryCheck {
+            target: target(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            status: Status::Okay,
+            status_code: "200 OK".to_string(),
+            alert: true,
+            need_to_alert: true
+        }
+    }
+
+    fn fire_result() -> CanaryCheck {
+        CanaryCheck {
+            target: target(),
+            time: "2016-10-14T08:00:00Z".to_string(),
+            status: Status::Fire,
+            status_code: "401 Unauthorized".to_string(),
+            alert: true,
+            need_to_alert: true
+        }
+    }
 
     #[test]
     fn it_reads_and_parses_a_config_file() {
@@ -320,19 +369,12 @@ mod tests {
 
     #[test]
     fn it_checks_invalid_target_hosts() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let actual = check_host(&target);
+        let actual = check_host(&target());
 
         let expected = CanaryCheck {
-            target: target.clone(),
+            target: target(),
             time: actual.time.clone(),
-            info: "unknown".to_string(),
+            status: Status::Unknown,
             status_code: "failed to poll server: relative URL without a base".to_string(),
             alert: false,
             need_to_alert: true
@@ -344,14 +386,14 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts() {
         thread::spawn(move || {
-            Server::http("0.0.0.0:56473").unwrap().handle(move |_req: Request, res: Response| {
+            Server::http("127.0.0.1:56473").unwrap().handle(move |_req: Request, res: Response| {
                 res.send(b"I love BGP").unwrap();
             }).unwrap();
         });
 
         let ok_target = CanaryTarget {
             name: "foo".to_string(),
-            host: "http://0.0.0.0:56473".to_string(),
+            host: "http://127.0.0.1:56473".to_string(),
             interval_s: 1,
             alert: false
         };
@@ -361,7 +403,7 @@ mod tests {
         let ok_expected = CanaryCheck {
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            info: "okay".to_string(),
+            status: Status::Okay,
             status_code: "200 OK".to_string(),
             alert: false,
             need_to_alert: false
@@ -372,151 +414,90 @@ mod tests {
 
     #[test]
     fn it_marks_as_spam_on_empty_history() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let ok_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "okay".to_string(),
-            status_code: "200 OK".to_string(),
-            alert: true,
-            need_to_alert: false
-        };
-
         let mut last_statuses = HashMap::new();
-        let empty_actual = check_spam(&mut last_statuses, &ok_result);
-        let empty_expected = true;
-        assert_eq!(empty_expected, empty_actual);
+
+        let actual = check_spam(&mut last_statuses, &okay_result());
+
+        assert_eq!(false, actual);
     }
 
     #[test]
     fn it_does_not_mark_as_spam_on_change_from_okay_to_fire() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-
-        let fire_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "fire".to_string(),
-            status_code: "401 Unauthorized".to_string(),
-            alert: true,
-            need_to_alert: true
-        };
-
         let mut last_statuses = HashMap::new();
-        last_statuses.insert(target.clone(), "okay".to_string());
-        let ok_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
-        let ok_to_fire_expected = false;
-        assert_eq!(ok_to_fire_expected, ok_to_fire_actual);
+        last_statuses.insert(target(), Status::Okay);
+
+        let actual = check_spam(&mut last_statuses, &fire_result());
+
+        assert_eq!(false, actual);
     }
 
     #[test]
     fn it_marks_as_spam_on_continued_okay() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let ok_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "okay".to_string(),
-            status_code: "200 OK".to_string(),
-            alert: true,
-            need_to_alert: false
-        };
-
         let mut last_statuses = HashMap::new();
-        last_statuses.insert(target.clone(), "okay".to_string());
-        let ok_to_ok_actual = check_spam(&mut last_statuses, &ok_result);
-        let ok_to_ok_expected = true;
-        assert_eq!(ok_to_ok_expected, ok_to_ok_actual);
+        last_statuses.insert(target(), Status::Okay);
+
+        let actual = check_spam(&mut last_statuses, &okay_result());
+
+        assert_eq!(true, actual);
     }
 
     #[test]
     fn it_marks_as_spam_on_continued_fire() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let fire_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "fire".to_string(),
-            status_code: "401 Unauthorized".to_string(),
-            alert: true,
-            need_to_alert: true
-        };
-
         let mut last_statuses = HashMap::new();
-        last_statuses.insert(target.clone(), "fire".to_string());
-        let fire_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
-        let fire_to_fire_expected = true;
-        assert_eq!(fire_to_fire_expected, fire_to_fire_actual);
+        last_statuses.insert(target(), Status::Fire);
+
+        let actual = check_spam(&mut last_statuses, &fire_result());
+
+        assert_eq!(true, actual);
     }
 
     #[test]
     fn it_does_not_mark_as_spam_on_change_from_fire_to_okay() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let ok_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "okay".to_string(),
-            status_code: "200 OK".to_string(),
-            alert: true,
-            need_to_alert: false
-        };
-
         let mut last_statuses = HashMap::new();
-        last_statuses.insert(target.clone(), "fire".to_string());
-        let fire_to_ok_actual = check_spam(&mut last_statuses, &ok_result);
-        let fire_to_ok_expected = false;
-        assert_eq!(fire_to_ok_expected, fire_to_ok_actual);
+        last_statuses.insert(target(), Status::Fire);
+
+        let actual = check_spam(&mut last_statuses, &okay_result());
+
+        assert_eq!(false, actual);
     }
 
     #[test]
     fn it_marks_as_spam_on_change_from_unknown_to_fire() {
-        let target = CanaryTarget {
-            name: "foo".to_string(),
-            host: "invalid".to_string(),
-            interval_s: 1,
-            alert: false
-        };
-
-        let fire_result = CanaryCheck {
-            target: target.clone(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            info: "fire".to_string(),
-            status_code: "401 Unauthorized".to_string(),
-            alert: true,
-            need_to_alert: true
-        };
-
         let mut last_statuses = HashMap::new();
-        last_statuses.insert(target.clone(), "unknown".to_string());
-        let unk_to_fire_actual = check_spam(&mut last_statuses, &fire_result);
-        let unk_to_fire_expected = true;
-        assert_eq!(unk_to_fire_expected, unk_to_fire_actual);
+        last_statuses.insert(target(), Status::Unknown);
+
+        let actual = check_spam(&mut last_statuses, &fire_result());
+
+        assert_eq!(false, actual);
+    }
+
+    #[test]
+    fn it_marks_as_fixed_on_change_from_unknown_to_okay() {
+        let mut last_statuses = HashMap::new();
+        last_statuses.insert(target(), Status::Unknown);
+
+        let actual = check_fixed(&mut last_statuses, &okay_result());
+
+        assert_eq!(true, actual);
+    }
+
+    #[test]
+    fn it_marks_as_fixed_on_change_from_fire_to_okay() {
+        let mut last_statuses = HashMap::new();
+        last_statuses.insert(target(), Status::Fire);
+
+        let actual = check_fixed(&mut last_statuses, &okay_result());
+
+        assert_eq!(true, actual);
+    }
+
+    #[test]
+    fn it_marks_as_unfixed_on_change_from_fire_to_fire() {
+        let mut last_statuses = HashMap::new();
+        last_statuses.insert(target(), Status::Fire);
+
+        let actual = check_fixed(&mut last_statuses, &fire_result());
+
+        assert_eq!(false, actual);
     }
 }
