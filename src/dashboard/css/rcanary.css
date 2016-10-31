@@ -25,7 +25,7 @@ html, body{
   background-color: #F9D423;
 }
 
-.probe-target[data-status="okay"] {
+.probe-target[data-status="Okay"] {
   background-color: #59A80F;
 }
 
