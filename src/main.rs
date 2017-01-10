@@ -205,12 +205,15 @@ fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String>
         Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result)
     };
 
-    let email = try!(EmailBuilder::new()
+    let email = match EmailBuilder::new()
         .to(&*config.alert.alert_email)
         .from(&*config.alert.smtp_username)
         .subject(&format!("rcanary alert for {}", &result.target.host))
         .body(&body)
-        .build());
+        .build() {
+            Ok(e) => e,
+            Err(err) => return Err(format!("{}", err))
+        };
 
     let transport = SmtpTransportBuilder::new((&*config.alert.smtp_server, config.alert.smtp_port));
     let mut mailer = match transport {

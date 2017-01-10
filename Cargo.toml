@@ -8,9 +8,9 @@ name = "rcanary"
 test = true
 
 [dependencies]
-hyper = "*"
-lettre = "0.5"
+hyper = "0.9"
+lettre = "0.6"
 rustc-serialize = "0.3"
 time = "0.1"
-toml = "0.1"
-ws = "*"
+toml = "0.2"
+ws = "0.5"
