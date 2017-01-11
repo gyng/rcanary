@@ -9,7 +9,7 @@ pub struct ClientHandler;
 impl Handler for ClientHandler {}
 
 pub struct ClientFactory {
-  pub config: CanaryConfig
+    pub config: CanaryConfig,
 }
 
 impl Factory for ClientFactory {

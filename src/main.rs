@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::fs;
 use std::io::{Read, Write};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
@@ -28,7 +28,7 @@ pub struct CanaryLogConfig {
     dir_path: String,
     enabled: bool,
     file: bool,
-    stdout: bool
+    stdout: bool,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -38,7 +38,7 @@ pub struct CanaryAlertConfig {
     smtp_server: String,
     smtp_username: String,
     smtp_password: String,
-    smtp_port: u16
+    smtp_port: u16,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -46,12 +46,12 @@ pub struct CanaryConfig {
     targets: CanaryTargetTypes,
     server_listen_address: String,
     log: CanaryLogConfig,
-    alert: CanaryAlertConfig
+    alert: CanaryAlertConfig,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 struct CanaryTargetTypes {
-    http: Vec<CanaryTarget>
+    http: Vec<CanaryTarget>,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
@@ -59,7 +59,7 @@ struct CanaryTarget {
     name: String,
     host: String,
     interval_s: u64,
-    alert: bool
+    alert: bool,
 }
 
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -69,24 +69,25 @@ pub struct CanaryCheck {
     status_code: String,
     time: String,
     alert: bool,
-    need_to_alert: bool
+    need_to_alert: bool,
 }
 
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub enum Status {
     Okay,
     Fire,
-    Unknown
+    Unknown,
 }
 
 fn main() {
     // Read config
-    let config_path = env::args().nth(1)
+    let config_path = env::args()
+        .nth(1)
         .expect("no configuration file supplied as the first argument");
 
     let config = match read_config(&config_path) {
         Ok(c) => c,
-        Err(err) => panic!("failed to read configuration file {}: {}", config_path, err)
+        Err(err) => panic!("failed to read configuration file {}: {}", config_path, err),
     };
 
     // Setup map to save results
@@ -120,7 +121,7 @@ fn main() {
     loop {
         let result = match poll_rx.recv() {
             Ok(result) => result,
-            Err(_) => continue
+            Err(_) => continue,
         };
 
         if config.log.enabled {
@@ -135,7 +136,7 @@ fn main() {
             log(&config.log, &format!("Sending alert for {:?}", result));
             let child_config = config.clone();
             let child_result = result.clone();
-            thread::spawn(move || { send_alert(&child_config, &child_result) });
+            thread::spawn(move || send_alert(&child_config, &child_result));
         }
 
         if let Ok(json) = json::encode(&result) {
@@ -157,8 +158,8 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
             status: Status::Unknown,
             status_code: format!("failed to poll server: {}", err),
             alert: target.alert,
-            need_to_alert: true
-        }
+            need_to_alert: true,
+        };
     }
 
     // Should never panic on unwrap
@@ -175,7 +176,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         status: status,
         status_code: format!("{}", response.status),
         alert: target.alert,
-        need_to_alert: need_to_alert
+        need_to_alert: need_to_alert,
     }
 }
 
@@ -184,17 +185,15 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
     match last_statuses.get(&result.target) {
         Some(status) => status == &result.status,
-        _ => false
+        _ => false,
     }
 }
 
 fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
     match (last_statuses.get(&result.target), &result.status) {
         (Some(&Status::Fire), &Status::Okay) |
-        (Some(&Status::Unknown), &Status::Okay) => {
-            true
-        },
-        _ => false
+        (Some(&Status::Unknown), &Status::Okay) => true,
+        _ => false,
     }
 }
 
@@ -202,7 +201,7 @@ fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String>
     let body = match result.status {
         Status::Fire => format!("🔥 Something has gone terribly wrong:\n{:#?}", result),
         Status::Unknown => format!("🚨 Something is probably wrong:\n{:#?}", result),
-        Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result)
+        Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result),
     };
 
     let email = match EmailBuilder::new()
@@ -211,26 +210,35 @@ fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String>
         .subject(&format!("rcanary alert for {}", &result.target.host))
         .body(&body)
         .build() {
-            Ok(e) => e,
-            Err(err) => return Err(format!("{}", err))
-        };
+        Ok(e) => e,
+        Err(err) => return Err(format!("{}", err)),
+    };
 
     let transport = SmtpTransportBuilder::new((&*config.alert.smtp_server, config.alert.smtp_port));
     let mut mailer = match transport {
-        Ok(t) => t
-            .hello_name("localhost")
-            .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
-            .security_level(SecurityLevel::AlwaysEncrypt)
-            .smtp_utf8(true)
-            .build(),
-        Err(err) => return Err(format!("failed to create email smtp transport for {} {}: {}", config.alert.smtp_server, config.alert.smtp_port, err))
+        Ok(t) => {
+            t.hello_name("localhost")
+                .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
+                .security_level(SecurityLevel::AlwaysEncrypt)
+                .smtp_utf8(true)
+                .build()
+        }
+        Err(err) => {
+            return Err(format!("failed to create email smtp transport for {} {}: {}",
+                               config.alert.smtp_server,
+                               config.alert.smtp_port,
+                               err))
+        }
     };
 
     match mailer.send(email) {
         Ok(_) => {
-            log(&config.log, &format!("email alert sent to {} for {}", config.alert.alert_email, &result.target.host));
+            log(&config.log,
+                &format!("email alert sent to {} for {}",
+                         config.alert.alert_email,
+                         &result.target.host));
             Ok(())
-        },
+        }
         Err(err) => {
             let error_string = format!("failed to send email alert: {}", err);
             log(&config.log, &format!("{}", error_string));
@@ -242,11 +250,15 @@ fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String>
 fn log(config: &CanaryLogConfig, log_text: &str) {
     if config.file {
         let mut path_buf = PathBuf::from(&config.dir_path);
-        fs::create_dir_all(&path_buf).expect(&format!("failed to create directory {}", config.dir_path));
+        fs::create_dir_all(&path_buf)
+            .expect(&format!("failed to create directory {}", config.dir_path));
         path_buf.push("log.txt");
         let mut f = OpenOptions::new()
-            .write(true).append(true).create(true)
-            .open(path_buf).expect("failed to open log file for writing");
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(path_buf)
+            .expect("failed to open log file for writing");
 
         let _ = f.write_all(log_text.as_bytes());
     }
@@ -265,12 +277,12 @@ fn read_config(path: &str) -> Result<CanaryConfig, String> {
 
     let mut file = match File::open(&path) {
         Ok(f) => f,
-        Err(err) => return Err(format!("failed to read file {}", err))
+        Err(err) => return Err(format!("failed to read file {}", err)),
     };
 
     let mut config_toml = String::new();
     if let Err(err) = file.read_to_string(&mut config_toml) {
-        return Err(format!("error reading config: {}", err))
+        return Err(format!("error reading config: {}", err));
     }
 
     let parsed_toml = toml::Parser::new(&config_toml).parse().expect("error parsing config file");
@@ -279,7 +291,7 @@ fn read_config(path: &str) -> Result<CanaryConfig, String> {
     let config = toml::Value::Table(parsed_toml);
     match toml::decode(config) {
         Some(c) => Ok(c),
-        None => Err("error while deserializing config".to_string())
+        None => Err("error while deserializing config".to_string()),
     }
 }
 
@@ -289,11 +301,8 @@ mod tests {
 
     use std::collections::HashMap;
     use std::thread;
-    use super::{
-        CanaryConfig, CanaryAlertConfig, CanaryLogConfig,
-        CanaryCheck, CanaryTargetTypes, CanaryTarget, Status,
-        read_config, check_host, check_spam, check_fixed
-    };
+    use super::{CanaryConfig, CanaryAlertConfig, CanaryLogConfig, CanaryCheck, CanaryTargetTypes,
+                CanaryTarget, Status, read_config, check_host, check_spam, check_fixed};
     use hyper::server::{Server, Request, Response};
 
     fn target() -> CanaryTarget {
@@ -301,7 +310,7 @@ mod tests {
             name: "foo".to_string(),
             host: "invalid".to_string(),
             interval_s: 1,
-            alert: false
+            alert: false,
         }
     }
 
@@ -312,7 +321,7 @@ mod tests {
             status: Status::Okay,
             status_code: "200 OK".to_string(),
             alert: true,
-            need_to_alert: true
+            need_to_alert: true,
         }
     }
 
@@ -323,7 +332,7 @@ mod tests {
             status: Status::Fire,
             status_code: "401 Unauthorized".to_string(),
             alert: true,
-            need_to_alert: true
+            need_to_alert: true,
         }
     }
 
@@ -334,7 +343,7 @@ mod tests {
                 enabled: true,
                 dir_path: "log".to_string(),
                 file: false,
-                stdout: true
+                stdout: true,
             },
             alert: CanaryAlertConfig {
                 enabled: true,
@@ -342,31 +351,29 @@ mod tests {
                 smtp_server: "smtp.googlemail.com".to_string(),
                 smtp_username: "example@gmail.com".to_string(),
                 smtp_password: "hunter2".to_string(),
-                smtp_port: 587
+                smtp_port: 587,
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             targets: CanaryTargetTypes {
-                http: vec!(
-                    CanaryTarget {
-                        name: "Invalid".to_string(),
-                        host: "Hello, world!".to_string(),
-                        interval_s: 60,
-                        alert: false
-                    },
-                    CanaryTarget {
-                        name: "404".to_string(),
-                        host: "http://www.google.com/404".to_string(),
-                        interval_s: 5,
-                        alert: false
-                    },
-                    CanaryTarget {
-                        name: "Google".to_string(),
-                        host: "https://www.google.com".to_string(),
-                        interval_s: 5,
-                        alert: false
-                    },
-                )
-            }
+                http: vec![CanaryTarget {
+                               name: "Invalid".to_string(),
+                               host: "Hello, world!".to_string(),
+                               interval_s: 60,
+                               alert: false,
+                           },
+                           CanaryTarget {
+                               name: "404".to_string(),
+                               host: "http://www.google.com/404".to_string(),
+                               interval_s: 5,
+                               alert: false,
+                           },
+                           CanaryTarget {
+                               name: "Google".to_string(),
+                               host: "https://www.google.com".to_string(),
+                               interval_s: 5,
+                               alert: false,
+                           }],
+            },
         };
 
         let actual = read_config("tests/fixtures/config.toml").unwrap();
@@ -384,7 +391,7 @@ mod tests {
             status: Status::Unknown,
             status_code: "failed to poll server: relative URL without a base".to_string(),
             alert: false,
-            need_to_alert: true
+            need_to_alert: true,
         };
 
         assert_eq!(expected, actual);
@@ -393,16 +400,19 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts() {
         thread::spawn(move || {
-            Server::http("127.0.0.1:56473").unwrap().handle(move |_req: Request, res: Response| {
-                res.send(b"I love BGP").unwrap();
-            }).unwrap();
+            Server::http("127.0.0.1:56473")
+                .unwrap()
+                .handle(move |_req: Request, res: Response| {
+                    res.send(b"I love BGP").unwrap();
+                })
+                .unwrap();
         });
 
         let ok_target = CanaryTarget {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56473".to_string(),
             interval_s: 1,
-            alert: false
+            alert: false,
         };
 
         let ok_actual = check_host(&ok_target);
@@ -413,7 +423,7 @@ mod tests {
             status: Status::Okay,
             status_code: "200 OK".to_string(),
             alert: false,
-            need_to_alert: false
+            need_to_alert: false,
         };
 
         assert_eq!(ok_expected, ok_actual);
