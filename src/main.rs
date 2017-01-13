@@ -1,31 +1,29 @@
+extern crate docopt;
+extern crate env_logger;
 extern crate hyper;
 extern crate lettre;
+#[macro_use]
+extern crate log;
 extern crate rustc_serialize;
 extern crate time;
 extern crate toml;
 extern crate ws;
 
+mod alert;
 mod ws_handler;
 
-use std::env;
 use std::collections::HashMap;
+use std::env;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use std::error::Error;
 
-use lettre::email::EmailBuilder;
-use lettre::transport::EmailTransport;
-use lettre::transport::smtp::{SecurityLevel, SmtpTransportBuilder};
+use docopt::Docopt;
 use rustc_serialize::json;
-
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -50,7 +48,7 @@ struct CanaryTargetTypes {
 }
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
-struct CanaryTarget {
+pub struct CanaryTarget {
     name: String,
     host: String,
     interval_s: u64,
@@ -74,19 +72,38 @@ pub enum Status {
     Unknown,
 }
 
+const USAGE: &'static str = "
+rcanary
+A minimal monitoring program with email alerts
+
+Usage:
+  rcanary <configuration-file>
+  rcanary (-h | --help)
+
+Options:
+  -h --help     Show this screen.
+";
+
+#[derive(RustcDecodable, Debug)]
+struct Args {
+    arg_configuration_file: String,
+}
+
 fn main() {
     env::set_var("RUST_LOG", "rcanary=info,ws=info"); // TODO: use a proper logger
     env_logger::init().unwrap();
 
-    // Read config
-    let config_path = env::args()
-        .nth(1)
-        .expect("no configuration file supplied as the first argument");
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
-    let config = match read_config(&config_path) {
-        Ok(c) => c,
-        Err(err) => panic!("failed to read configuration file {}: {}", config_path, err),
-    };
+    let config = read_config(&args.arg_configuration_file)
+        .map_err(|err| {
+            panic!("failed to read configuration file {}: {}",
+                   &args.arg_configuration_file,
+                   err)
+        })
+        .unwrap();
 
     // Setup map to save results
     let mut last_statuses = HashMap::new();
@@ -124,15 +141,14 @@ fn main() {
 
         info!("[probe.result] {:?}", &result);
 
-        let is_spam = check_spam(&last_statuses, &result);
-        let is_fixed = check_fixed(&last_statuses, &result);
+        let is_spam = alert::check_spam(&last_statuses, &result);
+        let is_fixed = alert::check_fixed(&last_statuses, &result);
         last_statuses.insert(result.target.clone(), result.status.clone());
 
         if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
-            info!("sending alert for {:?}", result);
             let child_config = config.clone();
             let child_result = result.clone();
-            thread::spawn(move || send_alert(&child_config, &child_result));
+            thread::spawn(move || alert::send_alert(&child_config, &child_result));
         }
 
         if let Ok(json) = json::encode(&result) {
@@ -162,72 +178,6 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     }
 }
 
-// Checks if alert would be spam.
-// Alert would be spam if state has not changed since last poll
-fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
-    match last_statuses.get(&result.target) {
-        Some(status) => status == &result.status,
-        _ => false,
-    }
-}
-
-fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
-    match (last_statuses.get(&result.target), &result.status) {
-        (Some(&Status::Fire), &Status::Okay) |
-        (Some(&Status::Unknown), &Status::Okay) => true,
-        _ => false,
-    }
-}
-
-fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String> {
-    let body = match result.status {
-        Status::Fire => format!("🔥 Something has gone terribly wrong:\n{:#?}", result),
-        Status::Unknown => format!("🚨 Something is probably wrong:\n{:#?}", result),
-        Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result),
-    };
-
-    let email = match EmailBuilder::new()
-        .to(&*config.alert.alert_email)
-        .from(&*config.alert.smtp_username)
-        .subject(&format!("rcanary alert for {}", &result.target.host))
-        .body(&body)
-        .build() {
-        Ok(e) => e,
-        Err(err) => return Err(format!("{}", err)),
-    };
-
-    let transport = SmtpTransportBuilder::new((&*config.alert.smtp_server, config.alert.smtp_port));
-    let mut mailer = match transport {
-        Ok(t) => {
-            t.hello_name("localhost")
-                .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
-                .security_level(SecurityLevel::AlwaysEncrypt)
-                .smtp_utf8(true)
-                .build()
-        }
-        Err(err) => {
-            return Err(format!("failed to create email smtp transport for {} {}: {}",
-                               config.alert.smtp_server,
-                               config.alert.smtp_port,
-                               err))
-        }
-    };
-
-    match mailer.send(email) {
-        Ok(_) => {
-            info!("[alert.success] email alert sent to {} for {}",
-                  config.alert.alert_email,
-                  &result.target.host);
-            Ok(())
-        }
-        Err(err) => {
-            let error_string = format!("[alert.failure] failed to send email alert: {}", err);
-            info!("{}", error_string);
-            Err(error_string)
-        }
-    }
-}
-
 fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
     info!("reading configuration from `{}`...", path);
     let mut file = File::open(&path)?;
@@ -246,40 +196,17 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 mod tests {
     extern crate hyper;
 
-    use std::collections::HashMap;
     use std::thread;
     use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
-                Status, read_config, check_host, check_spam, check_fixed};
+                Status, read_config, check_host};
     use hyper::server::{Server, Request, Response};
 
-    fn target() -> CanaryTarget {
+    pub fn target() -> CanaryTarget {
         CanaryTarget {
             name: "foo".to_string(),
             host: "invalid".to_string(),
             interval_s: 1,
             alert: false,
-        }
-    }
-
-    fn okay_result() -> CanaryCheck {
-        CanaryCheck {
-            target: target(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: true,
-            need_to_alert: true,
-        }
-    }
-
-    fn fire_result() -> CanaryCheck {
-        CanaryCheck {
-            target: target(),
-            time: "2016-10-14T08:00:00Z".to_string(),
-            status: Status::Fire,
-            status_code: "401 Unauthorized".to_string(),
-            alert: true,
-            need_to_alert: true,
         }
     }
 
@@ -368,94 +295,5 @@ mod tests {
         };
 
         assert_eq!(ok_expected, ok_actual);
-    }
-
-    #[test]
-    fn it_marks_as_spam_on_empty_history() {
-        let mut last_statuses = HashMap::new();
-
-        let actual = check_spam(&mut last_statuses, &okay_result());
-
-        assert_eq!(false, actual);
-    }
-
-    #[test]
-    fn it_does_not_mark_as_spam_on_change_from_okay_to_fire() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Okay);
-
-        let actual = check_spam(&mut last_statuses, &fire_result());
-
-        assert_eq!(false, actual);
-    }
-
-    #[test]
-    fn it_marks_as_spam_on_continued_okay() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Okay);
-
-        let actual = check_spam(&mut last_statuses, &okay_result());
-
-        assert_eq!(true, actual);
-    }
-
-    #[test]
-    fn it_marks_as_spam_on_continued_fire() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Fire);
-
-        let actual = check_spam(&mut last_statuses, &fire_result());
-
-        assert_eq!(true, actual);
-    }
-
-    #[test]
-    fn it_does_not_mark_as_spam_on_change_from_fire_to_okay() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Fire);
-
-        let actual = check_spam(&mut last_statuses, &okay_result());
-
-        assert_eq!(false, actual);
-    }
-
-    #[test]
-    fn it_marks_as_spam_on_change_from_unknown_to_fire() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Unknown);
-
-        let actual = check_spam(&mut last_statuses, &fire_result());
-
-        assert_eq!(false, actual);
-    }
-
-    #[test]
-    fn it_marks_as_fixed_on_change_from_unknown_to_okay() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Unknown);
-
-        let actual = check_fixed(&mut last_statuses, &okay_result());
-
-        assert_eq!(true, actual);
-    }
-
-    #[test]
-    fn it_marks_as_fixed_on_change_from_fire_to_okay() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Fire);
-
-        let actual = check_fixed(&mut last_statuses, &okay_result());
-
-        assert_eq!(true, actual);
-    }
-
-    #[test]
-    fn it_marks_as_unfixed_on_change_from_fire_to_fire() {
-        let mut last_statuses = HashMap::new();
-        last_statuses.insert(target(), Status::Fire);
-
-        let actual = check_fixed(&mut last_statuses, &fire_result());
-
-        assert_eq!(false, actual);
     }
 }
