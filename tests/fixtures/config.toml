@@ -8,12 +8,6 @@ smtp_username = "example@gmail.com"
 smtp_password = "hunter2"
 smtp_port = 587
 
-[log]
-dir_path = "log"
-enabled = true
-file = false
-stdout = true
-
 [[targets.http]]
 name = "Invalid"
 host = "Hello, world!"

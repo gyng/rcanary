@@ -8,4 +8,7 @@ services:
     ports:
       - "8099:8099"
     volumes:
-      - ./config:/app/src/config
+      - ./config:/app/config:ro
+      - logs:/app/logs
+volumes:
+  logs: {}

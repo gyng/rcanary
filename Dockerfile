@@ -1,13 +1,14 @@
-FROM lawliet89/debian-rust:1.12.1
+FROM lawliet89/debian-rust:1.14.0
 
-COPY Cargo.toml Cargo.lock ./
-RUN cargo fetch
+WORKDIR /app/src
 
-COPY . ./
-RUN cargo build --release
-
-VOLUME /app/src/config
+VOLUME /app/config
+VOLUME /app/logs
 EXPOSE 8099
 
-ENTRYPOINT ["cargo"]
-CMD ["run", "--release", "--", "/app/src/config/config.toml"]
+COPY entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["--"]
+
+COPY ./ ./
+RUN cargo build --release

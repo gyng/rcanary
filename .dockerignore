@@ -1,5 +1,4 @@
 target
-log/*.txt
-config.toml
-config/
+log
+config
 *.DS_Store

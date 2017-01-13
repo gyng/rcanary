@@ -8,8 +8,10 @@ name = "rcanary"
 test = true
 
 [dependencies]
+env_logger = "0.3"
 hyper = "0.9"
 lettre = "0.6"
+log = "0.3"
 rustc-serialize = "0.3"
 time = "0.1"
 toml = "0.2"
