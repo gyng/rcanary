@@ -25,3 +25,7 @@ name = "Google"
 host = "https://www.google.com"
 interval_s = 5
 alert = false
+
+[targets.http.basic_auth]
+username = "AzureDiamond"
+password = "hunter2"
