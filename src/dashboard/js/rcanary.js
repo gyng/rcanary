@@ -1,7 +1,15 @@
 (function () {
   'use strict';
 
-  var serverAddress = 'ws://127.0.0.1:8099';
+  var hash = window.location.hash.substr(1);
+  var hostname = window.location.hostname;
+  var protocol = window.location.protocol == 'https' ? 'wss' : 'ws';
+  var port = '8099';
+  var serverAddress = hash || (protocol + '://' + hostname + ':' + port);
+
+  console.log('rcanary server address: ' + serverAddress);
+  console.log(hash ? 'set from URL hash' : 'set to default address as hash is empty');
+
   var targets = null;
   var retryHandlerID = null;
   var staleTimers = {};

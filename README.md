@@ -23,7 +23,7 @@ Then, you can run it as such using:
 
     docker build -t rcanary .
     docker run -v /path/to/config:/app/config rcanary
-    
+
     # Or use docker-compose
     docker-compose up
 
@@ -37,7 +37,18 @@ Note: the logger overrides `RUST_LOG` to be `info`.
 
 ## Dashboard
 
-An example dashboard is at `src/dashboard/index.html`. Point `serverAddress` in `rcanary.js` to your rcanary server.
+An example dashboard is at `src/dashboard/index.html`. By default it connects to port `8099` on the current hostname.
+
+    http://localhost
+    connects to => ws://localhost:8099
+
+    https://my.dashboard.example.com
+    connects to => wss://my.dashboard.example.com:8099
+
+To specify a rcanary instance to connect to, add a hash to the URL as such:
+
+    http://my.dashboard.example.com#ws://my.rcanary.example.com:8888
+    connects to => ws://my.rcanary.example.com:8888
 
 # License
 
