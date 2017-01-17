@@ -331,7 +331,7 @@ mod tests {
         thread::spawn(move || {
             Server::http("127.0.0.1:56474")
                 .unwrap()
-                .handle(move |req: Request, _res: Response| {
+                .handle(move |_req: Request, _res: Response| {
                     let mut expected_headers = Headers::new();
                     expected_headers.set(Authorization(Basic {
                         username: "AzureDiamond".to_string(),
