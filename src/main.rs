@@ -1,3 +1,4 @@
+#![cfg_attr(test, deny(warnings))]
 extern crate docopt;
 extern crate env_logger;
 extern crate hyper;
@@ -24,6 +25,7 @@ use std::time::Duration;
 
 use docopt::Docopt;
 use rustc_serialize::json;
+use hyper::header::{Headers, Authorization, Basic};
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -53,6 +55,13 @@ pub struct CanaryTarget {
     host: String,
     interval_s: u64,
     alert: bool,
+    basic_auth: Option<Auth>,
+}
+
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
+pub struct Auth {
+    username: String,
+    password: Option<String>,
 }
 
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -160,7 +169,18 @@ fn main() {
 }
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
-    let response_raw = hyper::Client::new().get(&target.host).send();
+    let mut headers = Headers::new();
+    if let Some(ref a) = target.basic_auth {
+        headers.set(Authorization(Basic {
+            username: a.username.clone(),
+            password: a.password.clone(),
+        }))
+    };
+
+    let response_raw = hyper::Client::new()
+        .get(&target.host)
+        .headers(headers)
+        .send();
 
     let (need_to_alert, status, status_code) = match response_raw {
         Ok(ref r) if r.status.is_success() => (false, Status::Okay, r.status.to_string()),
@@ -198,8 +218,9 @@ mod tests {
 
     use std::thread;
     use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
-                Status, read_config, check_host};
+                Auth, Status, read_config, check_host};
     use hyper::server::{Server, Request, Response};
+    use hyper::header::{Headers, Authorization, Basic};
 
     pub fn target() -> CanaryTarget {
         CanaryTarget {
@@ -207,6 +228,7 @@ mod tests {
             host: "invalid".to_string(),
             interval_s: 1,
             alert: false,
+            basic_auth: None,
         }
     }
 
@@ -228,18 +250,24 @@ mod tests {
                                host: "Hello, world!".to_string(),
                                interval_s: 60,
                                alert: false,
+                               basic_auth: None,
                            },
                            CanaryTarget {
                                name: "404".to_string(),
                                host: "http://www.google.com/404".to_string(),
                                interval_s: 5,
                                alert: false,
+                               basic_auth: None,
                            },
                            CanaryTarget {
                                name: "Google".to_string(),
                                host: "https://www.google.com".to_string(),
                                interval_s: 5,
                                alert: false,
+                               basic_auth: Some(Auth {
+                                   username: "AzureDiamond".to_string(),
+                                   password: Some("hunter2".to_string()),
+                               }),
                            }],
             },
         };
@@ -281,6 +309,47 @@ mod tests {
             host: "http://127.0.0.1:56473".to_string(),
             interval_s: 1,
             alert: false,
+            basic_auth: None,
+        };
+
+        let ok_actual = check_host(&ok_target);
+
+        let ok_expected = CanaryCheck {
+            target: ok_target.clone(),
+            time: ok_actual.time.clone(),
+            status: Status::Okay,
+            status_code: "200 OK".to_string(),
+            alert: false,
+            need_to_alert: false,
+        };
+
+        assert_eq!(ok_expected, ok_actual);
+    }
+
+    #[test]
+    fn it_checks_valid_target_hosts_with_basic_auth() {
+        thread::spawn(move || {
+            Server::http("127.0.0.1:56474")
+                .unwrap()
+                .handle(move |_req: Request, _res: Response| {
+                    let mut expected_headers = Headers::new();
+                    expected_headers.set(Authorization(Basic {
+                        username: "AzureDiamond".to_string(),
+                        password: Some("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=".to_string()), // hunter2
+                    }));
+                })
+                .unwrap();
+        });
+
+        let ok_target = CanaryTarget {
+            name: "foo".to_string(),
+            host: "http://127.0.0.1:56474".to_string(),
+            interval_s: 1,
+            alert: false,
+            basic_auth: Some(Auth {
+                username: "AzureDiamond".to_string(),
+                password: Some("hunter2".to_string()),
+            }),
         };
 
         let ok_actual = check_host(&ok_target);

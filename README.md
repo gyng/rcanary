@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/gyng/rcanary.svg?branch=master)](https://travis-ci.org/gyng/rcanary)
 
-A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. rcanary exposes a websocket server for dashboards to connect to.
+A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. Supports basic auth for HTTP targets. rcanary exposes a websocket server for dashboards to connect to.
 
 # Usage
 
@@ -10,7 +10,7 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
     cd rcanary
     cargo run --release my_config.toml
 
-Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in `test/fixtures/config.toml`.
+Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in (`tests/fixtures/config.toml`)[tests/fixtures/config.toml].
 
 ## Gmail
 SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en). The example `config.toml` has some defaults set for Gmail.
