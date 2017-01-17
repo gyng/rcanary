@@ -1,3 +1,4 @@
+#![cfg_attr(test, deny(warnings))]
 extern crate docopt;
 extern crate env_logger;
 extern crate hyper;
