@@ -1,9 +1,9 @@
 /* These CSS variables are just here to list the colours */
 /* To support IE they are not used in any CSS variables */
 :root {
-  --fire-bg-color: #FF4E50;
-  --okay-bg-color: #59A80F;
-  --unknown-bg-color: #F9D423;
+  --fire-bg-color: #ff4e50;
+  --okay-bg-color: #59a80f;
+  --unknown-bg-color: #f9d423;
 }
 
 html, body{
@@ -16,35 +16,45 @@ html, body{
   width: 100%;
 }
 
+a {
+  text-decoration: inherit;
+  color: inherit;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 .probe-target[data-stale="true"] {
   filter: grayscale(90%);
   -webkit-filter: grayscale(90%);
 }
 
-.probe-target[data-status="unknown"] {
-  background-color: #F9D423;
+.probe-target[data-status="Fire"] {
+  background-color: #ff4e50;
 }
 
 .probe-target[data-status="Okay"] {
-  background-color: #59A80F;
+  background-color: #59a80f;
 }
 
+/* Default status is "Unknown" */
 .probe-target {
-  background-color: #FF4E50;
+  background-color: #f9d423;
   color: white;
   flex: 1;
-  width: 100%;
   height: 100%;
-  transition: all 0.5s;
+  transition: all .5s;
+  width: 100%;
 }
 
 .probe-name {
   font-size: 150%;
-  margin: 0 0 0.5em 0;
+  margin: 0 0 .5em;
 }
 
 .probe-status {
-  margin-bottom: 0.5em;
+  margin-bottom: .5em;
 }
 
 .probe-container {

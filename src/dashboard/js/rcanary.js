@@ -80,6 +80,7 @@
 
         targetEl.querySelector('.probe-status').textContent = payload.status_code;
         targetEl.querySelector('.probe-time').textContent = time;
+        targetEl.querySelector('.probe-link').href = payload.target.host;
       }
     };
 
