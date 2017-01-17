@@ -13,7 +13,7 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
 Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in `test/fixtures/config.toml`.
 
 ## Gmail
-SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en).
+SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en). The example `config.toml` has some defaults set for Gmail.
 
 ## Docker
 
