@@ -10,10 +10,10 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
     cd rcanary
     cargo run --release my_config.toml
 
-Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in (`tests/fixtures/config.toml`)[tests/fixtures/config.toml].
+Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in [`tests/fixtures/config.toml`](tests/fixtures/config.toml).
 
 ## Gmail
-SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en). The example `config.toml` has some defaults set for Gmail.
+SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en). The example [`config.toml`](tests/fixtures/config.toml) has some defaults set for Gmail.
 
 ## Docker
 
@@ -37,7 +37,7 @@ Note: the logger overrides `RUST_LOG` to be `info`.
 
 ## Dashboard
 
-An example dashboard is at `src/dashboard/index.html`. By default it connects to port `8099` on the current hostname.
+An example dashboard is at [`src/dashboard/index.html`](src/dashboard/index.html). By default it connects to port `8099` on the current hostname.
 
     http://localhost
     connects to => ws://localhost:8099
