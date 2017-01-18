@@ -1,4 +1,3 @@
-#![cfg_attr(test, deny(warnings))]
 extern crate docopt;
 extern crate env_logger;
 extern crate hyper;
@@ -227,7 +226,6 @@ mod tests {
     use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
                 Auth, Status, read_config, check_host};
     use hyper::server::{Server, Request, Response};
-    use hyper::header::{Headers, Authorization, Basic};
 
     pub fn target() -> CanaryTarget {
         CanaryTarget {
@@ -338,12 +336,8 @@ mod tests {
         thread::spawn(move || {
             Server::http("127.0.0.1:56474")
                 .unwrap()
-                .handle(move |_req: Request, _res: Response| {
-                    let mut expected_headers = Headers::new();
-                    expected_headers.set(Authorization(Basic {
-                        username: "AzureDiamond".to_string(),
-                        password: Some("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=".to_string()), // hunter2
-                    }));
+                .handle(move |req: Request, _res: Response| {
+                    assert!(req.headers.to_string().find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=").is_some()); // hunter2
                 })
                 .unwrap();
         });
@@ -371,5 +365,18 @@ mod tests {
         };
 
         assert_eq!(ok_expected, ok_actual);
+    }
+
+    #[test]
+    fn it_does_not_leak_passwords_in_debug_representation() {
+        let auth = Auth {
+            username: "AzureDiamond".to_string(),
+            password: Some("hunter2".to_string()),
+        };
+
+        let formatted = format!("{:?}", auth);
+
+        assert!(formatted.find("AzureDiamond").is_none());
+        assert!(formatted.find("hunter2").is_none());
     }
 }
