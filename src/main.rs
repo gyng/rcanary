@@ -24,7 +24,7 @@ use std::thread;
 use std::time::Duration;
 
 use docopt::Docopt;
-use rustc_serialize::json;
+use rustc_serialize::{Encoder, Encodable, json};
 use hyper::header::{Headers, Authorization, Basic};
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
@@ -58,7 +58,7 @@ pub struct CanaryTarget {
     basic_auth: Option<Auth>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Hash)]
+#[derive(RustcDecodable, Eq, PartialEq, Clone, Hash)]
 pub struct Auth {
     username: String,
     password: Option<String>,
@@ -67,6 +67,12 @@ pub struct Auth {
 impl fmt::Debug for Auth {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Auth {{ ... }}")
+    }
+}
+
+impl Encodable for Auth {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
+        s.emit_str("Auth { ... }")
     }
 }
 
@@ -129,11 +135,9 @@ fn main() {
     for http_target in config.clone().targets.http {
         let child_poll_tx = poll_tx.clone();
 
-        thread::spawn(move || {
-            loop {
-                let _ = child_poll_tx.send(check_host(&http_target));
-                thread::sleep(Duration::new(http_target.interval_s, 0));
-            }
+        thread::spawn(move || loop {
+            let _ = child_poll_tx.send(check_host(&http_target));
+            thread::sleep(Duration::new(http_target.interval_s, 0));
         });
     }
 
@@ -221,11 +225,13 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 #[cfg(test)]
 mod tests {
     extern crate hyper;
+    extern crate rustc_serialize;
 
     use std::thread;
     use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
                 Auth, Status, read_config, check_host};
     use hyper::server::{Server, Request, Response};
+    use rustc_serialize::json;
 
     pub fn target() -> CanaryTarget {
         CanaryTarget {
@@ -303,9 +309,7 @@ mod tests {
         thread::spawn(move || {
             Server::http("127.0.0.1:56473")
                 .unwrap()
-                .handle(move |_req: Request, res: Response| {
-                    res.send(b"I love BGP").unwrap();
-                })
+                .handle(move |_req: Request, res: Response| { res.send(b"I love BGP").unwrap(); })
                 .unwrap();
         });
 
@@ -337,7 +341,10 @@ mod tests {
             Server::http("127.0.0.1:56474")
                 .unwrap()
                 .handle(move |req: Request, _res: Response| {
-                    assert!(req.headers.to_string().find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=").is_some()); // hunter2
+                    assert!(req.headers
+                        .to_string()
+                        .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=")
+                        .is_some()) // hunter2
                 })
                 .unwrap();
         });
@@ -378,5 +385,18 @@ mod tests {
 
         assert!(formatted.find("AzureDiamond").is_none());
         assert!(formatted.find("hunter2").is_none());
+    }
+
+    #[test]
+    fn it_does_not_leak_passwords_in_encodable_representation() {
+        let auth = Auth {
+            username: "AzureDiamond".to_string(),
+            password: Some("hunter2".to_string()),
+        };
+
+        let encoded = json::encode(&auth).unwrap();
+
+        assert!(encoded.find("AzureDiamond").is_none());
+        assert!(encoded.find("hunter2").is_none());
     }
 }
