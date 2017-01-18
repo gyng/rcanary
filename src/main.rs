@@ -16,6 +16,7 @@ mod ws_handler;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::result::Result;
@@ -58,10 +59,16 @@ pub struct CanaryTarget {
     basic_auth: Option<Auth>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
+#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Hash)]
 pub struct Auth {
     username: String,
     password: Option<String>,
+}
+
+impl fmt::Debug for Auth {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Auth {{ ... }}")
+    }
 }
 
 #[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
