@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use docopt::Docopt;
 use rustc_serialize::{Encoder, Encodable, json};
-use hyper::header::{Headers, Authorization, Basic};
+use hyper::header::{Headers, Authorization, Basic, UserAgent};
 
 #[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -180,6 +180,8 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
+    headers.set(UserAgent("rcanary/0.1.0".to_string()));
+
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
             username: a.username.clone(),
