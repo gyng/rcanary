@@ -5,6 +5,10 @@ extern crate lettre;
 #[macro_use]
 extern crate log;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
 extern crate time;
 extern crate toml;
 extern crate ws;
@@ -24,10 +28,10 @@ use std::thread;
 use std::time::Duration;
 
 use docopt::Docopt;
-use rustc_serialize::{Encoder, Encodable, json};
+use serde::{Serialize, Serializer};
 use hyper::header::{Headers, Authorization, Basic, UserAgent};
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
     enabled: bool,
     alert_email: String,
@@ -37,19 +41,19 @@ pub struct CanaryAlertConfig {
     smtp_port: u16,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
     targets: CanaryTargetTypes,
     server_listen_address: String,
     alert: CanaryAlertConfig,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
 struct CanaryTargetTypes {
     http: Vec<CanaryTarget>,
 }
 
-#[derive(RustcDecodable, RustcEncodable, Eq, PartialEq, Clone, Debug, Hash)]
+#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct CanaryTarget {
     name: String,
     host: String,
@@ -70,13 +74,13 @@ impl fmt::Debug for Auth {
     }
 }
 
-impl Encodable for Auth {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        s.emit_str("Auth { ... }")
+impl Serialize for Auth {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str("Auth { ... }")
     }
 }
 
-#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryCheck {
     target: CanaryTarget,
     status: Status,
@@ -86,7 +90,7 @@ pub struct CanaryCheck {
     need_to_alert: bool,
 }
 
-#[derive(RustcEncodable, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Eq, PartialEq, Clone, Debug)]
 pub enum Status {
     Okay,
     Fire,
@@ -170,7 +174,7 @@ fn main() {
             thread::spawn(move || alert::send_alert(&child_config, &child_result));
         }
 
-        if let Ok(json) = json::encode(&result) {
+        if let Ok(json) = serde_json::to_string(&result) {
             let _ = broadcaster.send(json);
         } else {
             error!("failed to encode result into json {:?}", &result);
@@ -228,12 +232,12 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 mod tests {
     extern crate hyper;
     extern crate rustc_serialize;
+    extern crate serde_json;
 
     use std::thread;
     use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
                 Auth, Status, read_config, check_host};
     use hyper::server::{Server, Request, Response};
-    use rustc_serialize::json;
 
     pub fn target() -> CanaryTarget {
         CanaryTarget {
@@ -396,7 +400,7 @@ mod tests {
             password: Some("hunter2".to_string()),
         };
 
-        let encoded = json::encode(&auth).unwrap();
+        let encoded = serde_json::to_string(&auth).unwrap();
 
         assert!(encoded.find("AzureDiamond").is_none());
         assert!(encoded.find("hunter2").is_none());
