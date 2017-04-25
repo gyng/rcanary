@@ -31,7 +31,7 @@ use docopt::Docopt;
 use serde::{Serialize, Serializer};
 use hyper::header::{Headers, Authorization, Basic, UserAgent};
 
-#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
     enabled: bool,
     alert_email: String,
@@ -41,19 +41,19 @@ pub struct CanaryAlertConfig {
     smtp_port: u16,
 }
 
-#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
     targets: CanaryTargetTypes,
     server_listen_address: String,
     alert: CanaryAlertConfig,
 }
 
-#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 struct CanaryTargetTypes {
     http: Vec<CanaryTarget>,
 }
 
-#[derive(RustcDecodable, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct CanaryTarget {
     name: String,
     host: String,
@@ -62,7 +62,7 @@ pub struct CanaryTarget {
     basic_auth: Option<Auth>,
 }
 
-#[derive(RustcDecodable, Eq, PartialEq, Clone, Hash)]
+#[derive(Deserialize, Eq, PartialEq, Clone, Hash)]
 pub struct Auth {
     username: String,
     password: Option<String>,
@@ -220,12 +220,7 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
     let mut config_toml = String::new();
     file.read_to_string(&mut config_toml)?;
 
-    let parsed_toml = toml::Parser::new(&config_toml)
-        .parse()
-        .expect("error parsing config file");
-
-    let config = toml::Value::Table(parsed_toml);
-    toml::decode(config).ok_or_else(|| panic!("error deserializing config"))
+    Ok(toml::from_str(&config_toml)?)
 }
 
 #[cfg(test)]
