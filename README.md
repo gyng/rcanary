@@ -27,6 +27,8 @@ Then, you can run it as such using:
     # Or use docker-compose
     docker-compose up
 
+You will need at least Docker engine version 17.05 (API version 1.29) to build the image.
+
 ## Logging
 
 All log output is sent to `stdout`. The Docker image also `tee`s the log output into files in the `logs` volume. To do it without Docker, pipe the output into a file with `tee`:
