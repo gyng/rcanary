@@ -73,7 +73,7 @@ Note: the logger overrides `RUST_LOG` to be `info`.
 
 ## Dashboard
 
-![Dashboard](doc/dashboard.png)
+![Dashboard](dashboard.png)
 
 An example dashboard is at [`src/dashboard/index.html`](src/dashboard/index.html). By default it connects to port `8099` on the current hostname.
 
