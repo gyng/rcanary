@@ -12,7 +12,41 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
 
 Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in [`tests/fixtures/config.toml`](tests/fixtures/config.toml).
 
-## Gmail
+## Basic auth
+
+Add this below any target in `config.toml`
+
+```toml
+[targets.http.basic_auth]
+username = "bigboss"
+password = "secret"
+```
+
+## Email alerts
+
+Email alerts will fire once when an error is detected, and again when the error has been resolved.
+
+```
+rcanary alert for https://www.example.com
+
+🔥 Something has gone terribly wrong:
+CanaryCheck {
+    target: CanaryTarget {
+        name: "Production",
+        host: "https://www.example.com",
+        interval_s: 30,
+        alert: true,
+        basic_auth: None
+    },
+    status: Fire,
+    status_code: "500 Internal Server Error",
+    time: "2017-07-15T04:37:04Z",
+    alert: true,
+    need_to_alert: true
+}
+```
+
+### Gmail
 SMTP configuration for Gmail can be found [here](https://support.google.com/a/answer/176600). Additional details on using Gmail SMTP can be found [here](https://www.digitalocean.com/community/tutorials/how-to-use-google-s-smtp-server). You might also need to [enable less secure apps](https://support.google.com/accounts/answer/6010255?hl=en). The example [`config.toml`](tests/fixtures/config.toml) has some defaults set for Gmail.
 
 ## Docker
@@ -38,6 +72,8 @@ All log output is sent to `stdout`. The Docker image also `tee`s the log output 
 Note: the logger overrides `RUST_LOG` to be `info`.
 
 ## Dashboard
+
+![Dashboard](doc/dashboard.png)
 
 An example dashboard is at [`src/dashboard/index.html`](src/dashboard/index.html). By default it connects to port `8099` on the current hostname.
 
