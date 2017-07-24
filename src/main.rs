@@ -1,9 +1,9 @@
 extern crate docopt;
 extern crate env_logger;
-extern crate hyper;
 extern crate lettre;
 #[macro_use]
 extern crate log;
+extern crate reqwest;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
@@ -28,7 +28,6 @@ use std::time::Duration;
 
 use docopt::Docopt;
 use serde::{Serialize, Serializer};
-use hyper::header::{Headers, Authorization, Basic, UserAgent};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -183,34 +182,46 @@ fn main() {
 }
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
-    let mut headers = Headers::new();
-    headers.set(UserAgent("rcanary/0.1.0".to_string()));
+    let mut headers = reqwest::header::Headers::new();
+    headers.set(reqwest::header::UserAgent::new("rcanary/0.1.0"));
 
     if let Some(ref a) = target.basic_auth {
-        headers.set(Authorization(Basic {
+        headers.set(reqwest::header::Authorization(reqwest::header::Basic {
             username: a.username.clone(),
             password: a.password.clone(),
         }))
     };
 
-    let response_raw = hyper::Client::new()
-        .get(&target.host)
-        .headers(headers)
-        .send();
+    let response_raw = reqwest::Client::new()
+        .and_then(|r| r.get(&target.host));
 
-    let (need_to_alert, status, status_code) = match response_raw {
-        Ok(ref r) if r.status.is_success() => (false, Status::Okay, r.status.to_string()),
-        Ok(ref r) => (true, Status::Fire, r.status.to_string()),
-        Err(err) => (true, Status::Unknown, format!("failed to poll server: {}", err)),
-    };
+    if response_raw.is_ok() {
+        let response = response_raw.unwrap().headers(headers).send();
 
-    CanaryCheck {
-        target: target.clone(),
-        time: format!("{}", time::now_utc().rfc3339()),
-        status: status,
-        status_code: status_code,
-        alert: target.alert,
-        need_to_alert: need_to_alert,
+        let (need_to_alert, status, status_code) = match response {
+            Ok(ref r) if r.status().is_success() => (false, Status::Okay, r.status().to_string()),
+            Ok(ref r) => (true, Status::Fire, r.status().to_string()),
+            Err(err) => (true, Status::Unknown, format!("failed to poll server: {}", err)),
+        };
+
+        CanaryCheck {
+            target: target.clone(),
+            time: format!("{}", time::now_utc().rfc3339()),
+            status: status,
+            status_code: status_code,
+            alert: target.alert,
+            need_to_alert: need_to_alert,
+        }
+    } else {
+        // skip bad target, do not alert: bad configuration
+        CanaryCheck {
+            target: target.clone(),
+            time: format!("{}", time::now_utc().rfc3339()),
+            status: Status::Unknown,
+            status_code: format!("Bad URL: {}", format!("{}", response_raw.err().unwrap().description())),
+            alert: target.alert,
+            need_to_alert: false,
+        }
     }
 }
 
@@ -225,10 +236,15 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
+    extern crate hyper;
+    extern crate service_fn;
+
     use super::*;
 
     use std::{thread, time};
-    use hyper::server::{Server, Request, Response};
+    use self::hyper::server::{Http, Request, Response};
+    use self::hyper::header::{ContentLength, ContentType};
+    use self::service_fn::service_fn;
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);
@@ -302,9 +318,9 @@ mod tests {
             target: target(),
             time: actual.time.clone(),
             status: Status::Unknown,
-            status_code: "failed to poll server: relative URL without a base".to_string(),
+            status_code: "Bad URL: relative URL without a base".to_string(),
             alert: false,
-            need_to_alert: true,
+            need_to_alert: false,
         };
 
         assert_eq!(expected, actual);
@@ -312,11 +328,17 @@ mod tests {
 
     #[test]
     fn it_checks_valid_target_hosts() {
+        static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
-            Server::http("127.0.0.1:56473")
-                .unwrap()
-                .handle(move |_req: Request, res: Response| { res.send(b"I love BGP").unwrap(); })
-                .unwrap();
+            let addr = ([127, 0, 0, 1], 56473).into();
+            let hello = || Ok(service_fn(|_req|{
+                Ok(Response::<hyper::Body>::new()
+                    .with_header(ContentLength(TEXT.len() as u64))
+                    .with_header(ContentType::plaintext())
+                    .with_body(TEXT))
+            }));
+            let server = Http::new().bind(&addr, hello).unwrap();
+            let _ = server.run();
         });
         sleep();
 
@@ -346,15 +368,16 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
-            Server::http("127.0.0.1:56474")
-                .unwrap()
-                .handle(move |req: Request, _res: Response| {
-                    assert!(req.headers
+            let addr = ([127, 0, 0, 1], 56474).into();
+            let hello = || Ok(service_fn(|req: Request|{
+                assert!(req.headers()
                         .to_string()
                         .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=")
-                        .is_some()) // hunter2
-                })
-                .unwrap();
+                        .is_some()); // hunter2
+                Ok(Response::<hyper::Body>::new())
+            }));
+            let server = Http::new().bind(&addr, hello).unwrap();
+            let _ = server.run();
         });
         sleep();
 
