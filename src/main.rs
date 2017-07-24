@@ -4,7 +4,6 @@ extern crate hyper;
 extern crate lettre;
 #[macro_use]
 extern crate log;
-extern crate rustc_serialize;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
@@ -110,7 +109,7 @@ Options:
   -h --help     Show this screen.
 ";
 
-#[derive(RustcDecodable, Debug)]
+#[derive(Deserialize, Debug)]
 struct Args {
     arg_configuration_file: String,
 }
@@ -120,7 +119,7 @@ fn main() {
     env_logger::init().unwrap();
 
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
     let config = read_config(&args.arg_configuration_file)
