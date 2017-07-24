@@ -1,14 +1,37 @@
 (function () {
   'use strict';
 
-  var hash = window.location.hash.substr(1);
+  if (!window.WebSocket) {
+    document.body = 'This dashboard requires WebSocket support.';
+    return;
+  }
+
+  // https://stackoverflow.com/questions/901115
+  function getParameter (name, url) {
+      if (!url) url = window.location.href;
+      var param = name.replace(/[\[\]]/g, "\\$&");
+      var regex = new RegExp("[?&]" + param + "(=([^&#]*)|&|#|$)");
+      var results = regex.exec(url);
+      if (!results) return null;
+      if (!results[2]) return '';
+
+      return decodeURIComponent(results[2].replace(/\+/g, " "));
+  }
+
+  var customServerAddress = getParameter('server');
+  var customFilter = getParameter('filter');
+
   var hostname = window.location.hostname;
   var protocol = window.location.protocol == 'https' ? 'wss' : 'ws';
-  var port = '8099';
-  var serverAddress = hash || (protocol + '://' + hostname + ':' + port);
+  var defaultPort = '8099';
+  var defaultServerAddress = protocol + '://' + hostname + ':' + defaultPort;
+
+  var serverAddress = customServerAddress || defaultServerAddress;
+  var filter = customFilter && new RegExp(customFilter) || /.*/;
 
   console.log('rcanary server address: ' + serverAddress);
-  console.log(hash ? 'set from URL hash' : 'set to default address as hash is empty');
+  console.log(customServerAddress ? 'set from URL hash' : 'set to default address as hash is empty');
+  console.log('using tag filter: ' + filter);
 
   var targets = null;
   var retryHandlerID = null;
@@ -58,14 +81,22 @@
         var template = document.querySelector('#probe-target');
         var root = document.querySelector('#root');
 
-        targets.http.forEach(function (t) {
-          template.content.querySelector('.probe-name').textContent = t.name;
-          template.content.querySelector('.probe-target').dataset.host = t.host;
-          var clone = document.importNode(template.content, true);
-          root.appendChild(clone);
-        });
+        targets.http
+          .filter(function (t) {
+            return filter.test(t.tag);
+          })
+          .forEach(function (t) {
+            template.content.querySelector('.probe-name').textContent = t.name;
+            template.content.querySelector('.probe-target').dataset.host = t.host;
+            var clone = document.importNode(template.content, true);
+            root.appendChild(clone);
+          });
       } else {
         // Update to targets
+        if (!filter.test(payload.target.tag)) {
+          return;
+        }
+
         var selector = '.probe-target[data-host="' + payload.target.host + '"]';
         var targetEl = document.querySelector(selector);
         var time = new Date(Date.parse(payload.time)).toLocaleString(undefined, { timeZoneName: 'short' });

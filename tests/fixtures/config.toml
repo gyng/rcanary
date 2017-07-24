@@ -17,6 +17,7 @@ alert = false
 [[targets.http]]
 name = "404"
 host = "http://www.google.com/404"
+tag = "example-tag"
 interval_s = 5
 alert = false
 

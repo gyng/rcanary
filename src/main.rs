@@ -57,6 +57,7 @@ struct CanaryTargetTypes {
 pub struct CanaryTarget {
     name: String,
     host: String,
+    tag: Option<String>,
     interval_s: u64,
     alert: bool,
     basic_auth: Option<Auth>,
@@ -225,19 +226,21 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
-    extern crate hyper;
-    extern crate rustc_serialize;
-    extern crate serde_json;
+    use super::*;
 
-    use std::thread;
-    use super::{CanaryConfig, CanaryAlertConfig, CanaryCheck, CanaryTargetTypes, CanaryTarget,
-                Auth, Status, read_config, check_host};
+    use std::{thread, time};
     use hyper::server::{Server, Request, Response};
+
+    fn sleep() {
+        let delay = time::Duration::from_millis(250);
+        thread::sleep(delay);
+    }
 
     pub fn target() -> CanaryTarget {
         CanaryTarget {
             name: "foo".to_string(),
             host: "invalid".to_string(),
+            tag: Some("tag".to_string()),
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -260,6 +263,7 @@ mod tests {
                 http: vec![CanaryTarget {
                                name: "Invalid".to_string(),
                                host: "Hello, world!".to_string(),
+                               tag: None,
                                interval_s: 60,
                                alert: false,
                                basic_auth: None,
@@ -267,6 +271,7 @@ mod tests {
                            CanaryTarget {
                                name: "404".to_string(),
                                host: "http://www.google.com/404".to_string(),
+                               tag: Some("example-tag".to_string()),
                                interval_s: 5,
                                alert: false,
                                basic_auth: None,
@@ -274,6 +279,7 @@ mod tests {
                            CanaryTarget {
                                name: "Google".to_string(),
                                host: "https://www.google.com".to_string(),
+                               tag: None,
                                interval_s: 5,
                                alert: false,
                                basic_auth: Some(Auth {
@@ -313,10 +319,12 @@ mod tests {
                 .handle(move |_req: Request, res: Response| { res.send(b"I love BGP").unwrap(); })
                 .unwrap();
         });
+        sleep();
 
         let ok_target = CanaryTarget {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56473".to_string(),
+            tag: Some("bar".to_string()),
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -349,10 +357,12 @@ mod tests {
                 })
                 .unwrap();
         });
+        sleep();
 
         let ok_target = CanaryTarget {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56474".to_string(),
+            tag: Some("bar".to_string()),
             interval_s: 1,
             alert: false,
             basic_auth: Some(Auth {

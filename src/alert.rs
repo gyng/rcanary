@@ -80,8 +80,8 @@ pub fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use super::*;
     use {CanaryCheck, Status};
-    use super::{check_spam, check_fixed};
     use tests::target;
 
     fn okay_result() -> CanaryCheck {
