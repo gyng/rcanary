@@ -18,6 +18,11 @@
       return decodeURIComponent(results[2].replace(/\+/g, " "));
   }
 
+  function formatDatetime (datetime) {
+    return new Date(Date.parse(datetime))
+      .toLocaleString(undefined, { timeZoneName: 'short' });
+  }
+
   var customServerAddress = getParameter('server');
   var customFilter = getParameter('filter');
 
@@ -99,7 +104,7 @@
 
         var selector = '.probe-target[data-host="' + payload.target.host + '"]';
         var targetEl = document.querySelector(selector);
-        var time = new Date(Date.parse(payload.time)).toLocaleString(undefined, { timeZoneName: 'short' });
+        var time = formatDatetime(payload.time);
         targetEl.dataset.status = payload.status;
         targetEl.dataset.updated = payload.time;
 
@@ -112,6 +117,9 @@
         targetEl.querySelector('.probe-status').textContent = payload.status_code;
         targetEl.querySelector('.probe-time').textContent = time;
         targetEl.querySelector('.probe-link').href = payload.target.host;
+        if (payload.status === 'Okay') {
+          targetEl.querySelector('.probe-last-okay').textContent = 'Last OK: ' + formatDatetime(payload.time);
+        }
       }
     };
 

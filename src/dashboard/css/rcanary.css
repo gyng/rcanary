@@ -38,6 +38,15 @@ a:hover {
   background-color: #59a80f;
 }
 
+.probe-last-okay {
+  display: none;
+}
+
+.probe-target[data-status="Unknown"] .probe-last-okay,
+.probe-target[data-status="Fire"] .probe-last-okay {
+  display: block;
+}
+
 /* Default status is "Unknown" */
 .probe-target {
   background-color: #f9d423;
@@ -55,6 +64,10 @@ a:hover {
 
 .probe-status {
   margin-bottom: .5em;
+}
+
+.probe-last-okay {
+  margin-top: .5em;
 }
 
 .probe-container {

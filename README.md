@@ -83,12 +83,16 @@ An example dashboard is at [`src/dashboard/index.html`](src/dashboard/index.html
     https://my.dashboard.example.com
     connects to => wss://my.dashboard.example.com:8099
 
+### Specific rcanary server
+
 To specify a rcanary instance to connect to, add a `server` parameter to the URL:
 
     http://my.dashboard.example.com?server=ws://my.rcanary.example.com:8888
     connects to => ws://my.rcanary.example.com:8888
 
-To display specific targets based off a tag Regex, add a `name` parameter to the URL. This parameter defaults to `/.*/` (match all targets) if it is not provided or the regex is invalid.
+### Filtering targets
+
+To display specific targets based off a tag Regex, add a `filter` parameter to the URL. This parameter defaults to `/.*/` (match all targets) if it is not provided or the regex is invalid.
 
     http://my.dashboard.example.com?filter=some-regex-expression
     shows only targets with tags that match the regular expression
