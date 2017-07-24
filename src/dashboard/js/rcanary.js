@@ -59,6 +59,10 @@
     ws.onclose = function (e) {
       console.log('Connection closed', e);
 
+      if (retryHandlerID !== null) {
+        clearInterval(retryHandlerID);
+      }
+
       if (retryHandlerID === null) {
         console.log('Starting reconnect process...');
         retryHandlerID = setInterval(function () {
