@@ -1,9 +1,9 @@
 extern crate docopt;
 extern crate env_logger;
-extern crate hyper;
 extern crate lettre;
 #[macro_use]
 extern crate log;
+extern crate reqwest;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
@@ -28,7 +28,7 @@ use std::time::Duration;
 
 use docopt::Docopt;
 use serde::{Serialize, Serializer};
-use hyper::header::{Headers, Authorization, Basic, UserAgent};
+use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -124,9 +124,11 @@ fn main() {
 
     let config = read_config(&args.arg_configuration_file)
         .map_err(|err| {
-            panic!("failed to read configuration file {}: {}",
-                   &args.arg_configuration_file,
-                   err)
+            panic!(
+                "failed to read configuration file {}: {}",
+                &args.arg_configuration_file,
+                err
+            )
         })
         .unwrap();
 
@@ -184,7 +186,7 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
-    headers.set(UserAgent("rcanary/0.1.0".to_string()));
+    headers.set(UserAgent::new("rcanary/0.2.0"));
 
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
@@ -193,15 +195,25 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         }))
     };
 
-    let response_raw = hyper::Client::new()
-        .get(&target.host)
-        .headers(headers)
-        .send();
+    let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
-    let (need_to_alert, status, status_code) = match response_raw {
-        Ok(ref r) if r.status.is_success() => (false, Status::Okay, r.status.to_string()),
-        Ok(ref r) => (true, Status::Fire, r.status.to_string()),
-        Err(err) => (true, Status::Unknown, format!("failed to poll server: {}", err)),
+    let (need_to_alert, status, status_code) = match request {
+        Ok(mut request) => {
+            match request.headers(headers).send() {
+                Ok(ref r) if r.status().is_success() => (
+                    false,
+                    Status::Okay,
+                    r.status().to_string(),
+                ),
+                Ok(ref r) => (true, Status::Fire, r.status().to_string()),
+                Err(err) => (
+                    true,
+                    Status::Unknown,
+                    format!("failed to poll server: {}", err),
+                ),
+            }
+        }
+        Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
     };
 
     CanaryCheck {
@@ -225,10 +237,15 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
+    extern crate hyper;
+    extern crate service_fn;
+
     use super::*;
 
     use std::{thread, time};
-    use hyper::server::{Server, Request, Response};
+    use self::hyper::server::{Http, Request, Response};
+    use self::hyper::header::{ContentLength, ContentType};
+    use self::service_fn::service_fn;
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);
@@ -259,33 +276,35 @@ mod tests {
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             targets: CanaryTargetTypes {
-                http: vec![CanaryTarget {
-                               name: "Invalid".to_string(),
-                               host: "Hello, world!".to_string(),
-                               tag: None,
-                               interval_s: 60,
-                               alert: false,
-                               basic_auth: None,
-                           },
-                           CanaryTarget {
-                               name: "404".to_string(),
-                               host: "http://www.google.com/404".to_string(),
-                               tag: Some("example-tag".to_string()),
-                               interval_s: 5,
-                               alert: false,
-                               basic_auth: None,
-                           },
-                           CanaryTarget {
-                               name: "Google".to_string(),
-                               host: "https://www.google.com".to_string(),
-                               tag: None,
-                               interval_s: 5,
-                               alert: false,
-                               basic_auth: Some(Auth {
-                                   username: "AzureDiamond".to_string(),
-                                   password: Some("hunter2".to_string()),
-                               }),
-                           }],
+                http: vec![
+                    CanaryTarget {
+                        name: "Invalid".to_string(),
+                        host: "Hello, world!".to_string(),
+                        tag: None,
+                        interval_s: 60,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "404".to_string(),
+                        host: "http://www.google.com/404".to_string(),
+                        tag: Some("example-tag".to_string()),
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "Google".to_string(),
+                        host: "https://www.google.com".to_string(),
+                        tag: None,
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: Some(Auth {
+                            username: "AzureDiamond".to_string(),
+                            password: Some("hunter2".to_string()),
+                        }),
+                    },
+                ],
             },
         };
 
@@ -302,9 +321,9 @@ mod tests {
             target: target(),
             time: actual.time.clone(),
             status: Status::Unknown,
-            status_code: "failed to poll server: relative URL without a base".to_string(),
+            status_code: "bad URL: relative URL without a base".to_string(),
             alert: false,
-            need_to_alert: true,
+            need_to_alert: false,
         };
 
         assert_eq!(expected, actual);
@@ -312,11 +331,21 @@ mod tests {
 
     #[test]
     fn it_checks_valid_target_hosts() {
+        static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
-            Server::http("127.0.0.1:56473")
-                .unwrap()
-                .handle(move |_req: Request, res: Response| { res.send(b"I love BGP").unwrap(); })
-                .unwrap();
+            let addr = ([127, 0, 0, 1], 56473).into();
+            let hello = || {
+                Ok(service_fn(|_req| {
+                    Ok(
+                        Response::<hyper::Body>::new()
+                            .with_header(ContentLength(TEXT.len() as u64))
+                            .with_header(ContentType::plaintext())
+                            .with_body(TEXT),
+                    )
+                }))
+            };
+            let server = Http::new().bind(&addr, hello).unwrap();
+            let _ = server.run();
         });
         sleep();
 
@@ -346,15 +375,20 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
-            Server::http("127.0.0.1:56474")
-                .unwrap()
-                .handle(move |req: Request, _res: Response| {
-                    assert!(req.headers
-                        .to_string()
-                        .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=")
-                        .is_some()) // hunter2
-                })
-                .unwrap();
+            let addr = ([127, 0, 0, 1], 56474).into();
+            let hello = || {
+                Ok(service_fn(|req: Request| {
+                    assert!(
+                        req.headers()
+                            .to_string()
+                            .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=") // hunter2
+                            .is_some()
+                    );
+                    Ok(Response::<hyper::Body>::new())
+                }))
+            };
+            let server = Http::new().bind(&addr, hello).unwrap();
+            let _ = server.run();
         });
         sleep();
 
