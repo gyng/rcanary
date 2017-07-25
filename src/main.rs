@@ -216,7 +216,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
             (
                 false,
                 Status::Unknown,
-                format!("Bad URL: {}", format!("{}", err.description())),
+                format!("Bad URL: {}", err.description()),
             )
         }
     };
