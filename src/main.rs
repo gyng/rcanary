@@ -123,9 +123,11 @@ fn main() {
 
     let config = read_config(&args.arg_configuration_file)
         .map_err(|err| {
-            panic!("failed to read configuration file {}: {}",
-                   &args.arg_configuration_file,
-                   err)
+            panic!(
+                "failed to read configuration file {}: {}",
+                &args.arg_configuration_file,
+                err
+            )
         })
         .unwrap();
 
@@ -192,36 +194,40 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         }))
     };
 
-    let response_raw = reqwest::Client::new()
-        .and_then(|r| r.get(&target.host));
+    let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
-    if response_raw.is_ok() {
-        let response = response_raw.unwrap().headers(headers).send();
-
-        let (need_to_alert, status, status_code) = match response {
-            Ok(ref r) if r.status().is_success() => (false, Status::Okay, r.status().to_string()),
-            Ok(ref r) => (true, Status::Fire, r.status().to_string()),
-            Err(err) => (true, Status::Unknown, format!("failed to poll server: {}", err)),
-        };
-
-        CanaryCheck {
-            target: target.clone(),
-            time: format!("{}", time::now_utc().rfc3339()),
-            status: status,
-            status_code: status_code,
-            alert: target.alert,
-            need_to_alert: need_to_alert,
+    let (need_to_alert, status, status_code) = match request {
+        Ok(mut request) => {
+            match request.headers(headers).send() {
+                Ok(ref r) if r.status().is_success() => (
+                    false,
+                    Status::Okay,
+                    r.status().to_string(),
+                ),
+                Ok(ref r) => (true, Status::Fire, r.status().to_string()),
+                Err(err) => (
+                    true,
+                    Status::Unknown,
+                    format!("failed to poll server: {}", err),
+                ),
+            }
         }
-    } else {
-        // skip bad target, do not alert: bad configuration
-        CanaryCheck {
-            target: target.clone(),
-            time: format!("{}", time::now_utc().rfc3339()),
-            status: Status::Unknown,
-            status_code: format!("Bad URL: {}", format!("{}", response_raw.err().unwrap().description())),
-            alert: target.alert,
-            need_to_alert: false,
+        Err(err) => {
+            (
+                false,
+                Status::Unknown,
+                format!("Bad URL: {}", format!("{}", err.description())),
+            )
         }
+    };
+
+    CanaryCheck {
+        target: target.clone(),
+        time: format!("{}", time::now_utc().rfc3339()),
+        status: status,
+        status_code: status_code,
+        alert: target.alert,
+        need_to_alert: need_to_alert,
     }
 }
 
@@ -275,33 +281,35 @@ mod tests {
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             targets: CanaryTargetTypes {
-                http: vec![CanaryTarget {
-                               name: "Invalid".to_string(),
-                               host: "Hello, world!".to_string(),
-                               tag: None,
-                               interval_s: 60,
-                               alert: false,
-                               basic_auth: None,
-                           },
-                           CanaryTarget {
-                               name: "404".to_string(),
-                               host: "http://www.google.com/404".to_string(),
-                               tag: Some("example-tag".to_string()),
-                               interval_s: 5,
-                               alert: false,
-                               basic_auth: None,
-                           },
-                           CanaryTarget {
-                               name: "Google".to_string(),
-                               host: "https://www.google.com".to_string(),
-                               tag: None,
-                               interval_s: 5,
-                               alert: false,
-                               basic_auth: Some(Auth {
-                                   username: "AzureDiamond".to_string(),
-                                   password: Some("hunter2".to_string()),
-                               }),
-                           }],
+                http: vec![
+                    CanaryTarget {
+                        name: "Invalid".to_string(),
+                        host: "Hello, world!".to_string(),
+                        tag: None,
+                        interval_s: 60,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "404".to_string(),
+                        host: "http://www.google.com/404".to_string(),
+                        tag: Some("example-tag".to_string()),
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "Google".to_string(),
+                        host: "https://www.google.com".to_string(),
+                        tag: None,
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: Some(Auth {
+                            username: "AzureDiamond".to_string(),
+                            password: Some("hunter2".to_string()),
+                        }),
+                    },
+                ],
             },
         };
 
@@ -331,12 +339,16 @@ mod tests {
         static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
             let addr = ([127, 0, 0, 1], 56473).into();
-            let hello = || Ok(service_fn(|_req|{
-                Ok(Response::<hyper::Body>::new()
-                    .with_header(ContentLength(TEXT.len() as u64))
-                    .with_header(ContentType::plaintext())
-                    .with_body(TEXT))
-            }));
+            let hello = || {
+                Ok(service_fn(|_req| {
+                    Ok(
+                        Response::<hyper::Body>::new()
+                            .with_header(ContentLength(TEXT.len() as u64))
+                            .with_header(ContentType::plaintext())
+                            .with_body(TEXT),
+                    )
+                }))
+            };
             let server = Http::new().bind(&addr, hello).unwrap();
             let _ = server.run();
         });
@@ -369,13 +381,17 @@ mod tests {
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
             let addr = ([127, 0, 0, 1], 56474).into();
-            let hello = || Ok(service_fn(|req: Request|{
-                assert!(req.headers()
-                        .to_string()
-                        .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=")
-                        .is_some()); // hunter2
-                Ok(Response::<hyper::Body>::new())
-            }));
+            let hello = || {
+                Ok(service_fn(|req: Request| {
+                    assert!(
+                        req.headers()
+                            .to_string()
+                            .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=") // hunter2
+                            .is_some()
+                    );
+                    Ok(Response::<hyper::Body>::new())
+                }))
+            };
             let server = Http::new().bind(&addr, hello).unwrap();
             let _ = server.run();
         });
