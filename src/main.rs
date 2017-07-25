@@ -28,6 +28,7 @@ use std::time::Duration;
 
 use docopt::Docopt;
 use serde::{Serialize, Serializer};
+use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryAlertConfig {
@@ -184,11 +185,11 @@ fn main() {
 }
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
-    let mut headers = reqwest::header::Headers::new();
-    headers.set(reqwest::header::UserAgent::new("rcanary/0.1.0"));
+    let mut headers = Headers::new();
+    headers.set(UserAgent::new("rcanary/0.2.0"));
 
     if let Some(ref a) = target.basic_auth {
-        headers.set(reqwest::header::Authorization(reqwest::header::Basic {
+        headers.set(Authorization(Basic {
             username: a.username.clone(),
             password: a.password.clone(),
         }))
