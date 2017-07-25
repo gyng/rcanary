@@ -92,9 +92,9 @@ To specify a rcanary instance to connect to, add a `server` parameter to the URL
 
 ### Filtering targets
 
-To display specific targets based off a tag Regex, add a `filter` parameter to the URL. This parameter defaults to `/.*/` (match all targets) if it is not provided or the regex is invalid.
+To display specific targets based off a tag Regex, add a `filter` parameter to the URL. This parameter defaults to `.*` (match all targets) if it is not provided or the regex is invalid.
 
-    http://my.dashboard.example.com?filter=some-regex-expression
+    http://my.dashboard.example.com?filter=showme-.*
     shows only targets with tags that match the regular expression
 
 The parameters can be combined.
