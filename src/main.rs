@@ -213,13 +213,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
                 ),
             }
         }
-        Err(err) => {
-            (
-                false,
-                Status::Unknown,
-                format!("Bad URL: {}", err.description()),
-            )
-        }
+        Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
     };
 
     CanaryCheck {
@@ -327,7 +321,7 @@ mod tests {
             target: target(),
             time: actual.time.clone(),
             status: Status::Unknown,
-            status_code: "Bad URL: relative URL without a base".to_string(),
+            status_code: "bad URL: relative URL without a base".to_string(),
             alert: false,
             need_to_alert: false,
         };
