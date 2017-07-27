@@ -34,4 +34,4 @@ FROM alpine:3.5
 ARG ARCHITECTURE=x86_64-unknown-linux-musl
 WORKDIR /app
 COPY --from=builder /app/src/target/${ARCHITECTURE}/release/rcanary .
-CMD [/app/rcanary]
+CMD ["/app/rcanary"]
