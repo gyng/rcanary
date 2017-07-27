@@ -1,9 +1,8 @@
-FROM japaric/x86_64-unknown-linux-musl:v0.1.11 as builder
+FROM ubuntu:16.04
 MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 ENV PATH "/root/.cargo/bin:${PATH}"
 
 ARG RUST_VERSION=1.19.0
-ARG ARCHITECTURE=x86_64-unknown-linux-musl
 RUN set -x \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -16,7 +15,6 @@ RUN set -x \
                                           libssl-dev \
                                           pkg-config \
     && curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_VERSION} \
-    && rustup target add "${ARCHITECTURE}" \
     && apt-get remove -y --auto-remove curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -26,12 +24,6 @@ COPY Cargo.toml Cargo.lock ./
 RUN cargo fetch --locked -v
 
 COPY ./ ./
-RUN cargo build --release --target "${ARCHITECTURE}" -v --frozen
+RUN cargo build --release -v --frozen
 
-# Runtime Image
-
-FROM alpine:3.5
-ARG ARCHITECTURE=x86_64-unknown-linux-musl
-WORKDIR /app
-COPY --from=builder /app/src/target/${ARCHITECTURE}/release/rcanary .
-CMD ["/app/rcanary"]
+CMD ["/app/src/target/release/rcanary"]
