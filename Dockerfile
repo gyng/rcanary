@@ -1,8 +1,8 @@
-FROM japaric/x86_64-unknown-linux-musl:v0.1.10 as builder
+FROM japaric/x86_64-unknown-linux-musl:v0.1.11 as builder
 MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 ENV PATH "/root/.cargo/bin:${PATH}"
 
-ARG RUST_VERSION=1.17.0
+ARG RUST_VERSION=1.19.0
 ARG ARCHITECTURE=x86_64-unknown-linux-musl
 RUN set -x \
     && apt-get update \
