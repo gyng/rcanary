@@ -11,6 +11,7 @@ extern crate serde_json;
 extern crate time;
 extern crate toml;
 extern crate ws;
+extern crate librcanary;
 
 mod alert;
 mod ws_handler;
@@ -18,84 +19,15 @@ mod ws_handler;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
-use std::fmt;
 use std::fs::File;
 use std::io::Read;
-use std::result::Result;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use librcanary::*;
 use docopt::Docopt;
-use serde::{Serialize, Serializer};
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
-
-#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
-pub struct CanaryAlertConfig {
-    enabled: bool,
-    alert_email: String,
-    smtp_server: String,
-    smtp_username: String,
-    smtp_password: String,
-    smtp_port: u16,
-}
-
-#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
-pub struct CanaryConfig {
-    targets: CanaryTargetTypes,
-    server_listen_address: String,
-    alert: CanaryAlertConfig,
-}
-
-#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
-struct CanaryTargetTypes {
-    http: Vec<CanaryTarget>,
-}
-
-#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
-pub struct CanaryTarget {
-    name: String,
-    host: String,
-    tag: Option<String>,
-    interval_s: u64,
-    alert: bool,
-    basic_auth: Option<Auth>,
-}
-
-#[derive(Deserialize, Eq, PartialEq, Clone, Hash)]
-pub struct Auth {
-    username: String,
-    password: Option<String>,
-}
-
-impl fmt::Debug for Auth {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Auth {{ ... }}")
-    }
-}
-
-impl Serialize for Auth {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str("Auth { ... }")
-    }
-}
-
-#[derive(Serialize, Eq, PartialEq, Clone, Debug)]
-pub struct CanaryCheck {
-    target: CanaryTarget,
-    status: Status,
-    status_code: String,
-    time: String,
-    alert: bool,
-    need_to_alert: bool,
-}
-
-#[derive(Serialize, Eq, PartialEq, Clone, Debug)]
-pub enum Status {
-    Okay,
-    Fire,
-    Unknown,
-}
 
 const USAGE: &'static str = "
 rcanary
@@ -416,31 +348,5 @@ mod tests {
         };
 
         assert_eq!(ok_expected, ok_actual);
-    }
-
-    #[test]
-    fn it_does_not_leak_passwords_in_debug_representation() {
-        let auth = Auth {
-            username: "AzureDiamond".to_string(),
-            password: Some("hunter2".to_string()),
-        };
-
-        let formatted = format!("{:?}", auth);
-
-        assert!(formatted.find("AzureDiamond").is_none());
-        assert!(formatted.find("hunter2").is_none());
-    }
-
-    #[test]
-    fn it_does_not_leak_passwords_in_encodable_representation() {
-        let auth = Auth {
-            username: "AzureDiamond".to_string(),
-            password: Some("hunter2".to_string()),
-        };
-
-        let encoded = serde_json::to_string(&auth).unwrap();
-
-        assert!(encoded.find("AzureDiamond").is_none());
-        assert!(encoded.find("hunter2").is_none());
     }
 }

@@ -6,11 +6,29 @@ A minimal program to monitor statuses of webpages, with super-basic logging and 
 
 # Usage
 
+## As a program
+
     git clone https://github.com/gyng/rcanary.git
     cd rcanary
     cargo run --release my_config.toml
 
 Configure settings and the targets to probe in the configuration toml passed in to the program. An example is in [`tests/fixtures/config.toml`](tests/fixtures/config.toml).
+
+## As a library
+
+Structs used in rcanary are exported in a library for ease of use in other Rust programs. Add this to your dependencies in `Cargo.toml`:
+
+```toml
+librcanary = { git = "https://github.com/gyng/rcanary" }
+```
+
+```rust
+extern crate librcanary;
+
+fn main {
+    println!("Hello, {:?}!", librcanary::Status::Fire);
+}
+```
 
 ## Basic auth
 
