@@ -19,8 +19,13 @@
   }
 
   function formatDatetime (datetime) {
+    var locale = navigator.language ||
+      navigator.browserLanguage ||
+      navigator.systemLanguage ||
+      navigator.userLanguage;
+
     return new Date(Date.parse(datetime))
-      .toLocaleString(undefined, { timeZoneName: 'short' });
+      .toLocaleString(locale, { timeZoneName: 'short' });
   }
 
   var customServerAddress = getParameter('server');
