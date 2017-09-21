@@ -114,6 +114,8 @@
         var selector = '.probe-target[data-host="' + payload.target.host + '"]';
         var targetEl = document.querySelector(selector);
         var time = formatDatetime(payload.time);
+        var timeout_s = 30000; // Rust timeout
+
         targetEl.dataset.status = payload.status;
         targetEl.dataset.updated = payload.time;
 
@@ -121,7 +123,7 @@
         clearTimeout(staleTimers[payload.target.host]);
         staleTimers[payload.target.host] = setTimeout(function () {
           targetEl.dataset.stale = true;
-        }, payload.target.interval_s * 1000 * 2);
+        }, payload.target.interval_s * 1000 * 2 + timeout_s);
 
         targetEl.querySelector('.probe-status').textContent = payload.status_code;
         targetEl.querySelector('.probe-time').textContent = time;
