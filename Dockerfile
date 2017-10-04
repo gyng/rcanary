@@ -1,8 +1,7 @@
 FROM japaric/x86_64-unknown-linux-musl:v0.1.11 as builder
-MAINTAINER Yong Wen Chua <me@yongwen.xyz>
 ENV PATH "/root/.cargo/bin:${PATH}"
 
-ARG RUST_VERSION=1.19.0
+ARG RUST_VERSION=1.20.0
 ARG ARCHITECTURE=x86_64-unknown-linux-musl
 RUN set -x \
     && apt-get update \
@@ -23,6 +22,7 @@ RUN set -x \
 
 WORKDIR /app/src
 COPY Cargo.toml Cargo.lock ./
+COPY librcanary/Cargo.toml ./librcanary/Cargo.toml
 RUN cargo fetch --locked -v
 
 COPY ./ ./
@@ -32,6 +32,10 @@ RUN cargo build --release --target "${ARCHITECTURE}" -v --frozen
 
 FROM alpine:3.5
 ARG ARCHITECTURE=x86_64-unknown-linux-musl
+
+# See https://github.com/japaric/cross/issues/119
+ENV SSL_CERT_DIR /etc/ssl/certs
+
 WORKDIR /app
 COPY --from=builder /app/src/target/${ARCHITECTURE}/release/rcanary .
 CMD ["/app/rcanary"]
