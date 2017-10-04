@@ -3,6 +3,13 @@ name = "librcanary"
 version = "0.1.0"
 authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
 
+[lib]
+name = "librcanary"
+path = "src/lib.rs"
+test = true
+doctest = true
+doc = true
+
 [dependencies]
 serde = "1.0"
 serde_derive = "1.0"
