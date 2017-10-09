@@ -66,6 +66,7 @@
 
       if (retryHandlerID !== null) {
         clearInterval(retryHandlerID);
+        retryHandlerID = null;
       }
 
       if (retryHandlerID === null) {
