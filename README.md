@@ -69,6 +69,12 @@ SMTP configuration for Gmail can be found [here](https://support.google.com/a/an
 
 ## Docker
 
+[Docker Hub](https://hub.docker.com/r/gyng/rcanary/)
+
+```
+docker pull gyng/rcanary
+```
+
 By default, the image will mount a volume at `/app/config` and use `/app/config/config.toml`. Note that the configuration file is assumed to be at `config/config.toml` on the host.
 
 Then, you can run it as such using:
