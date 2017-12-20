@@ -56,11 +56,12 @@ fn main() {
 
     let config = read_config(&args.arg_configuration_file)
         .map_err(|err| {
-            panic!(
-                "failed to read configuration file {}: {}",
+            error!(
+                "[status.startup] failed to read configuration file {}: {}",
                 &args.arg_configuration_file,
                 err
-            )
+            );
+            panic!();
         })
         .unwrap();
 
@@ -80,14 +81,26 @@ fn main() {
     }
 
     // Start up websocket server
+    info!("[status.startup] starting websocker server...");
     let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() })
-        .unwrap_or_else(|err| panic!("failed to start websocket server {}", err));
+        .unwrap_or_else(|err| {
+            error!("[status.startup] failed to start websocket server {}", err);
+            panic!()
+        });
+    info!("[status.startup] started websocker server.");
     let broadcaster = me.broadcaster();
     let config_clone = config.clone();
     thread::spawn(move || {
         me.listen(&*config_clone.server_listen_address)
-            .unwrap_or_else(|err| panic!("failed to start websocket listener {}", err));
+            .unwrap_or_else(|err| {
+                error!(
+                    "[status.startup] failed to start websocket listener {}",
+                    err
+                );
+                panic!()
+            });
     });
+    info!("[status.startup] started websocket listener.");
 
     // Broadcast to all clients
     loop {
@@ -111,7 +124,10 @@ fn main() {
         if let Ok(json) = serde_json::to_string(&result) {
             let _ = broadcaster.send(json);
         } else {
-            error!("failed to encode result into json {:?}", &result);
+            error!(
+                "[status.startup] failed to encode result into json {:?}",
+                &result
+            );
         }
     }
 }
@@ -159,10 +175,11 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 }
 
 fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
-    info!("reading configuration from `{}`...", path);
+    info!("[status.startup] reading configuration from `{}`...", path);
     let mut file = File::open(&path)?;
     let mut config_toml = String::new();
     file.read_to_string(&mut config_toml)?;
+    info!("[status.startup] read configuration file.");
 
     Ok(toml::from_str(&config_toml)?)
 }
