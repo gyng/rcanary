@@ -56,12 +56,11 @@ fn main() {
 
     let config = read_config(&args.arg_configuration_file)
         .map_err(|err| {
-            error!(
+            panic!(
                 "[status.startup] failed to read configuration file {}: {}",
                 &args.arg_configuration_file,
                 err
             );
-            panic!();
         })
         .unwrap();
 
@@ -84,8 +83,7 @@ fn main() {
     info!("[status.startup] starting websocker server...");
     let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() })
         .unwrap_or_else(|err| {
-            error!("[status.startup] failed to start websocket server {}", err);
-            panic!()
+            panic!("[status.startup] failed to start websocket server {}", err);
         });
     info!("[status.startup] started websocker server.");
     let broadcaster = me.broadcaster();
@@ -93,11 +91,10 @@ fn main() {
     thread::spawn(move || {
         me.listen(&*config_clone.server_listen_address)
             .unwrap_or_else(|err| {
-                error!(
+                panic!(
                     "[status.startup] failed to start websocket listener {}",
                     err
                 );
-                panic!()
             });
     });
     info!("[status.startup] started websocket listener.");
@@ -124,7 +121,7 @@ fn main() {
         if let Ok(json) = serde_json::to_string(&result) {
             let _ = broadcaster.send(json);
         } else {
-            error!(
+            panic!(
                 "[status.startup] failed to encode result into json {:?}",
                 &result
             );
