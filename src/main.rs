@@ -7,31 +7,31 @@ extern crate log;
 extern crate reqwest;
 #[macro_use]
 extern crate serde_derive;
+extern crate librcanary;
 extern crate serde;
 extern crate serde_json;
 extern crate time;
 extern crate toml;
 extern crate ws;
-extern crate librcanary;
 
 mod alert;
 mod ws_handler;
 
-use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::net::SocketAddr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use librcanary::*;
 use docopt::Docopt;
-use hyper::{Body, Request, Response, Server};
 use hyper::rt::Future;
 use hyper::service::service_fn_ok;
+use hyper::{Body, Request, Response, Server};
+use librcanary::*;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
 const USAGE: &'static str = "
@@ -63,8 +63,7 @@ fn main() {
         .map_err(|err| {
             panic!(
                 "[status.startup] failed to read configuration file {}: {}",
-                &args.arg_configuration_file,
-                err
+                &args.arg_configuration_file, err
             );
         })
         .unwrap();
@@ -87,19 +86,23 @@ fn main() {
     // Start healthcheck endpoint
     if let Some(health_check_address) = config.clone().health_check_address {
         let addr: SocketAddr = health_check_address.parse().unwrap_or_else(|err| {
-            panic!("[status.startup] failed to start health check endpoint: {}", err);
+            panic!(
+                "[status.startup] failed to start health check endpoint: {}",
+                err
+            );
         });
 
-        info!("[status.startup] starting health check server at {}...", &addr);
+        info!(
+            "[status.startup] starting health check server at {}...",
+            &addr
+        );
 
         thread::spawn(move || {
             fn health_check_handler(_req: Request<Body>) -> Response<Body> {
                 Response::new(Body::from("OK"))
             }
 
-            let test_svc = || {
-                service_fn_ok(health_check_handler)
-            };
+            let test_svc = || service_fn_ok(health_check_handler);
 
             let server = Server::bind(&addr)
                 .serve(test_svc)
@@ -111,10 +114,11 @@ fn main() {
 
     // Start up websocket server
     info!("[status.startup] starting websocker server...");
-    let me = ws::WebSocket::new(ws_handler::ClientFactory { config: config.clone() })
-        .unwrap_or_else(|err| {
-            panic!("[status.startup] failed to start websocket server {}", err);
-        });
+    let me = ws::WebSocket::new(ws_handler::ClientFactory {
+        config: config.clone(),
+    }).unwrap_or_else(|err| {
+        panic!("[status.startup] failed to start websocket server {}", err);
+    });
     info!("[status.startup] started websocker server.");
     let broadcaster = me.broadcaster();
     let config_clone = config.clone();
@@ -173,21 +177,15 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
     let (need_to_alert, status, status_code) = match request {
-        Ok(mut request) => {
-            match request.headers(headers).send() {
-                Ok(ref r) if r.status().is_success() => (
-                    false,
-                    Status::Okay,
-                    r.status().to_string(),
-                ),
-                Ok(ref r) => (true, Status::Fire, r.status().to_string()),
-                Err(err) => (
-                    true,
-                    Status::Unknown,
-                    format!("failed to poll server: {}", err),
-                ),
-            }
-        }
+        Ok(mut request) => match request.headers(headers).send() {
+            Ok(ref r) if r.status().is_success() => (false, Status::Okay, r.status().to_string()),
+            Ok(ref r) => (true, Status::Fire, r.status().to_string()),
+            Err(err) => (
+                true,
+                Status::Unknown,
+                format!("failed to poll server: {}", err),
+            ),
+        },
         Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
     };
 
@@ -307,9 +305,7 @@ mod tests {
                 Response::new(Body::from(TEXT))
             }
 
-            let test_svc = || {
-                service_fn_ok(test_handler)
-            };
+            let test_svc = || service_fn_ok(test_handler);
 
             let addr = ([127, 0, 0, 1], 56473).into();
             let server = Server::bind(&addr)
@@ -348,17 +344,13 @@ mod tests {
         thread::spawn(move || {
             fn test_handler(req: Request<Body>) -> Response<Body> {
                 assert_eq!(
-                    req.headers()
-                        .get("Authorization")
-                        .unwrap(),
-                        "Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=" // hunter2
+                    req.headers().get("Authorization").unwrap(),
+                    "Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=" // hunter2
                 );
                 Response::new(Body::from("OK"))
             }
 
-            let test_svc = || {
-                service_fn_ok(test_handler)
-            };
+            let test_svc = || service_fn_ok(test_handler);
 
             let addr = ([127, 0, 0, 1], 56474).into();
             let server = Server::bind(&addr)

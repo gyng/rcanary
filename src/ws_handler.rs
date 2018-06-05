@@ -1,5 +1,5 @@
-extern crate ws;
 extern crate serde_json;
+extern crate ws;
 
 use ws::{Factory, Handler, Sender};
 use CanaryConfig;
