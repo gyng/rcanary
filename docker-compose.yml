@@ -7,6 +7,7 @@ services:
       TZ: "Asia/Singapore"
     ports:
       - "8099:8099"
+      - "8100:8100"
     volumes:
       - ./config:/app/config:ro
       - logs:/app/logs
