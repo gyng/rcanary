@@ -189,9 +189,13 @@ mod tests {
     use super::*;
 
     use std::{thread, time};
-    use self::hyper::server::{Http, Request, Response};
-    use self::hyper::header::{ContentLength, ContentType};
-    use self::service_fn::service_fn;
+    // use self::hyper::server::{Http, Request, Response};
+    // use self::hyper::header::{ContentLength, ContentType};
+    use self::hyper::{Body, Request, Response, Server};
+    use self::hyper::rt::Future;
+    use self::hyper::service::service_fn_ok;
+
+    // use self::service_fn::service_fn;
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);
@@ -279,19 +283,20 @@ mod tests {
     fn it_checks_valid_target_hosts() {
         static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
-            let addr = ([127, 0, 0, 1], 56473).into();
-            let hello = || {
-                Ok(service_fn(|_req| {
-                    Ok(
-                        Response::<hyper::Body>::new()
-                            .with_header(ContentLength(TEXT.len() as u64))
-                            .with_header(ContentType::plaintext())
-                            .with_body(TEXT),
-                    )
-                }))
+            fn test_handler(_req: Request<Body>) -> Response<Body> {
+                Response::new(Body::from(TEXT))
+            }
+
+            let test_svc = || {
+                service_fn_ok(test_handler)
             };
-            let server = Http::new().bind(&addr, hello).unwrap();
-            let _ = server.run();
+
+            let addr = ([127, 0, 0, 1], 56473).into();
+            let server = Server::bind(&addr)
+                .serve(test_svc)
+                .map_err(|e| eprintln!("server error: {}", e));
+
+            hyper::rt::run(server);
         });
         sleep();
 
@@ -321,20 +326,26 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
-            let addr = ([127, 0, 0, 1], 56474).into();
-            let hello = || {
-                Ok(service_fn(|req: Request| {
-                    assert!(
-                        req.headers()
-                            .to_string()
-                            .find("Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=") // hunter2
-                            .is_some()
-                    );
-                    Ok(Response::<hyper::Body>::new())
-                }))
+            fn test_handler(req: Request<Body>) -> Response<Body> {
+                assert_eq!(
+                    req.headers()
+                        .get("Authorization")
+                        .unwrap(),
+                        "Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=" // hunter2
+                );
+                Response::new(Body::from("OK"))
+            }
+
+            let test_svc = || {
+                service_fn_ok(test_handler)
             };
-            let server = Http::new().bind(&addr, hello).unwrap();
-            let _ = server.run();
+
+            let addr = ([127, 0, 0, 1], 56474).into();
+            let server = Server::bind(&addr)
+                .serve(test_svc)
+                .map_err(|e| eprintln!("server error: {}", e));
+
+            hyper::rt::run(server);
         });
         sleep();
 

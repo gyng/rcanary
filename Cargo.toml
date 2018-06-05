@@ -23,7 +23,7 @@ ws = "0.7"
 librcanary = { path = "librcanary" }
 
 [dev-dependencies]
-hyper = "0.11.1"
+hyper = "0.12"
 service-fn = { git = "https://github.com/tokio-rs/service-fn" }
 
 [workspace]
