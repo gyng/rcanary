@@ -123,6 +123,12 @@ To display specific targets based off a tag Regex, add a `filter` parameter to t
 
 The parameters can be combined.
 
+## Health check endpoint
+
+Set `health_check_address` in your configuration file for a HTTP health check endpoint to bind to. The health check endpoint will only run if the key is present and will return a HTTP 200 response containing the word `OK`.
+
+    health_check_address = "127.0.0.1:8100"
+
 # License
 
 MIT. See `LICENSE` for details.

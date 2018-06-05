@@ -11,6 +11,7 @@ test = true
 [dependencies]
 docopt = "0.8.1"
 env_logger = "0.4"
+hyper = "0.12"
 lettre = "0.6"
 log = "0.3"
 reqwest = "0.7.2"
@@ -21,9 +22,5 @@ time = "0.1"
 toml = "0.4"
 ws = "0.7"
 librcanary = { path = "librcanary" }
-
-[dev-dependencies]
-hyper = "0.12"
-service-fn = { git = "https://github.com/tokio-rs/service-fn" }
 
 [workspace]

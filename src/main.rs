@@ -1,5 +1,6 @@
 extern crate docopt;
 extern crate env_logger;
+extern crate hyper;
 extern crate lettre;
 #[macro_use]
 extern crate log;
@@ -16,6 +17,7 @@ extern crate librcanary;
 mod alert;
 mod ws_handler;
 
+use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -27,6 +29,9 @@ use std::time::Duration;
 
 use librcanary::*;
 use docopt::Docopt;
+use hyper::{Body, Request, Response, Server};
+use hyper::rt::Future;
+use hyper::service::service_fn_ok;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
 const USAGE: &'static str = "
@@ -76,6 +81,31 @@ fn main() {
         thread::spawn(move || loop {
             let _ = child_poll_tx.send(check_host(&http_target));
             thread::sleep(Duration::new(http_target.interval_s, 0));
+        });
+    }
+
+    // Start healthcheck endpoint
+    if let Some(health_check_address) = config.clone().health_check_address {
+        let addr: SocketAddr = health_check_address.parse().unwrap_or_else(|err| {
+            panic!("[status.startup] failed to start health check endpoint: {}", err);
+        });
+
+        info!("[status.startup] starting health check server at {}...", &addr);
+
+        thread::spawn(move || {
+            fn health_check_handler(_req: Request<Body>) -> Response<Body> {
+                Response::new(Body::from("OK"))
+            }
+
+            let test_svc = || {
+                service_fn_ok(health_check_handler)
+            };
+
+            let server = Server::bind(&addr)
+                .serve(test_svc)
+                .map_err(|e| eprintln!("server error: {}", e));
+
+            hyper::rt::run(server);
         });
     }
 
@@ -183,19 +213,8 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
-    extern crate hyper;
-    extern crate service_fn;
-
     use super::*;
-
     use std::{thread, time};
-    // use self::hyper::server::{Http, Request, Response};
-    // use self::hyper::header::{ContentLength, ContentType};
-    use self::hyper::{Body, Request, Response, Server};
-    use self::hyper::rt::Future;
-    use self::hyper::service::service_fn_ok;
-
-    // use self::service_fn::service_fn;
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);
@@ -225,6 +244,7 @@ mod tests {
                 smtp_port: 587,
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
+            health_check_address: Some("127.0.0.1:8100".to_string()),
             targets: CanaryTargetTypes {
                 http: vec![
                     CanaryTarget {

@@ -20,6 +20,7 @@ pub struct CanaryAlertConfig {
 pub struct CanaryConfig {
     pub targets: CanaryTargetTypes,
     pub server_listen_address: String,
+    pub health_check_address: Option<String>,
     pub alert: CanaryAlertConfig,
 }
 
