@@ -65,8 +65,7 @@ fn main() {
                 "[status.startup] failed to read configuration file {}: {}",
                 &args.arg_configuration_file, err
             );
-        })
-        .unwrap();
+        }).unwrap();
 
     // Setup map to save results
     let mut last_statuses = HashMap::new();
