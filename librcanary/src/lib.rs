@@ -16,11 +16,25 @@ pub struct CanaryAlertConfig {
     pub smtp_port: u16,
 }
 
+impl Default for CanaryAlertConfig {
+    fn default() -> Self {
+        CanaryAlertConfig {
+            enabled: false,
+            alert_email: "".to_string(),
+            smtp_server: "".to_string(),
+            smtp_username: "".to_string(),
+            smtp_password: "".to_string(),
+            smtp_port: 0,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
     pub targets: CanaryTargetTypes,
     pub server_listen_address: String,
     pub health_check_address: Option<String>,
+    #[serde(default)]
     pub alert: CanaryAlertConfig,
 }
 
