@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use CanaryCheck;
-use CanaryConfig;
-use CanaryTarget;
-use Status;
+use crate::CanaryCheck;
+use crate::CanaryConfig;
+use crate::CanaryTarget;
+use crate::Status;
 
 use lettre::email::EmailBuilder;
 use lettre::transport::smtp::{SecurityLevel, SmtpTransportBuilder};
@@ -25,64 +25,88 @@ pub fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &Canar
     }
 }
 
+pub trait Alerter {
+    fn alert(&self, result: &CanaryCheck) -> Result<(), String>;
+}
+
+pub struct EmailAlerter<'a> {
+    pub config: &'a CanaryConfig,
+}
+impl<'a> Alerter for EmailAlerter<'a> {
+    fn alert(&self, result: &CanaryCheck) -> Result<(), String> {
+        let body = match result.status {
+            Status::Fire => format!("🔥 Something has gone terribly wrong:\n{:#?}", result),
+            Status::Unknown => format!("🚨 Something is probably wrong:\n{:#?}", result),
+            Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result),
+        };
+
+        let email_config = match self.config.alert.email {
+            Some(ref config) => config,
+            None => return Err("email alerts configuration missing".to_string()),
+        };
+
+        let email = match EmailBuilder::new()
+            .to(&*email_config.alert_email)
+            .from(&*email_config.smtp_username)
+            .subject(&format!("rcanary alert for {}", &result.target.host))
+            .body(&body)
+            .build()
+        {
+            Ok(e) => e,
+            Err(err) => return Err(format!("{}", err)),
+        };
+
+        let transport =
+            SmtpTransportBuilder::new((&*email_config.smtp_server, email_config.smtp_port));
+        let mut mailer = match transport {
+            Ok(t) => t
+                .hello_name("localhost")
+                .credentials(&email_config.smtp_username, &email_config.smtp_password)
+                .security_level(SecurityLevel::AlwaysEncrypt)
+                .smtp_utf8(true)
+                .build(),
+            Err(err) => {
+                return Err(format!(
+                    "failed to create email smtp transport for {} {}: {}",
+                    email_config.smtp_server, email_config.smtp_port, err
+                ))
+            }
+        };
+
+        match mailer.send(email) {
+            Ok(_) => {
+                info!(
+                    "[alert.success] email alert sent to {} for {}",
+                    email_config.alert_email, &result.target.host
+                );
+                Ok(())
+            }
+            Err(err) => {
+                let error_string = format!("[alert.failure] failed to send email alert: {}", err);
+                info!("{}", error_string);
+                Err(error_string)
+            }
+        }
+    }
+}
+
 pub fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), String> {
     info!("[alert.send] sending alert for {:?}", result);
 
-    let body = match result.status {
-        Status::Fire => format!("🔥 Something has gone terribly wrong:\n{:#?}", result),
-        Status::Unknown => format!("🚨 Something is probably wrong:\n{:#?}", result),
-        Status::Okay => format!("🙇 Everything is now okay:\n{:#?}", result),
-    };
-
-    let email = match EmailBuilder::new()
-        .to(&*config.alert.alert_email)
-        .from(&*config.alert.smtp_username)
-        .subject(&format!("rcanary alert for {}", &result.target.host))
-        .body(&body)
-        .build()
-    {
-        Ok(e) => e,
-        Err(err) => return Err(format!("{}", err)),
-    };
-
-    let transport = SmtpTransportBuilder::new((&*config.alert.smtp_server, config.alert.smtp_port));
-    let mut mailer = match transport {
-        Ok(t) => t
-            .hello_name("localhost")
-            .credentials(&config.alert.smtp_username, &config.alert.smtp_password)
-            .security_level(SecurityLevel::AlwaysEncrypt)
-            .smtp_utf8(true)
-            .build(),
-        Err(err) => {
-            return Err(format!(
-                "failed to create email smtp transport for {} {}: {}",
-                config.alert.smtp_server, config.alert.smtp_port, err
-            ))
-        }
-    };
-
-    match mailer.send(email) {
-        Ok(_) => {
-            info!(
-                "[alert.success] email alert sent to {} for {}",
-                config.alert.alert_email, &result.target.host
-            );
-            Ok(())
-        }
-        Err(err) => {
-            let error_string = format!("[alert.failure] failed to send email alert: {}", err);
-            info!("{}", error_string);
-            Err(error_string)
-        }
+    if config.alert.email.is_some() {
+        let alerter: EmailAlerter = EmailAlerter { config: &config };
+        return alerter.alert(result);
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::target;
+    use crate::{CanaryCheck, Status};
     use std::collections::HashMap;
-    use tests::target;
-    use {CanaryCheck, Status};
 
     fn okay_result() -> CanaryCheck {
         CanaryCheck {

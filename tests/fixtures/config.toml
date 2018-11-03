@@ -3,11 +3,16 @@ health_check_address = "127.0.0.1:8100"
 
 [alert]
 enabled = true
+
+[alert.email]
 alert_email = "rcanary.alert.inbox@gmail.com"
 smtp_server = "smtp.googlemail.com"
 smtp_username = "example@gmail.com"
 smtp_password = "hunter2"
 smtp_port = 587
+
+[metrics]
+enabled = false
 
 [[targets.http]]
 name = "Invalid"

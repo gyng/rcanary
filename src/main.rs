@@ -234,11 +234,13 @@ mod tests {
         let expected = CanaryConfig {
             alert: CanaryAlertConfig {
                 enabled: true,
-                alert_email: "rcanary.alert.inbox@gmail.com".to_string(),
-                smtp_server: "smtp.googlemail.com".to_string(),
-                smtp_username: "example@gmail.com".to_string(),
-                smtp_password: "hunter2".to_string(),
-                smtp_port: 587,
+                email: Some(CanaryEmailAlertConfig {
+                    alert_email: "rcanary.alert.inbox@gmail.com".to_string(),
+                    smtp_server: "smtp.googlemail.com".to_string(),
+                    smtp_username: "example@gmail.com".to_string(),
+                    smtp_password: "hunter2".to_string(),
+                    smtp_port: 587,
+                }),
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             health_check_address: Some("127.0.0.1:8100".to_string()),
