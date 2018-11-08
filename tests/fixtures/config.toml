@@ -28,6 +28,12 @@ interval_s = 5
 alert = false
 
 [[targets.http]]
+name = "localhost:8080"
+host = "http://localhost:8080"
+interval_s = 5
+alert = false
+
+[[targets.http]]
 name = "Google"
 host = "https://www.google.com"
 interval_s = 5

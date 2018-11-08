@@ -164,7 +164,7 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
-    headers.set(UserAgent::new("rcanary/0.2.0"));
+    headers.set(UserAgent::new("rcanary/0.4.0"));
 
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
@@ -258,6 +258,14 @@ mod tests {
                         name: "404".to_string(),
                         host: "http://www.google.com/404".to_string(),
                         tag: Some("example-tag".to_string()),
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "localhost:8080".to_string(),
+                        host: "http://localhost:8080".to_string(),
+                        tag: None,
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,

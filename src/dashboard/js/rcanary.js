@@ -28,8 +28,28 @@
       .toLocaleString(locale, { timeZoneName: 'short' });
   }
 
+  function notify (payload, originalDataset) {
+    var statusIcons = {
+      Unknown: '🚨',
+      Fire: '🔥',
+      Okay: '✅'
+    };
+    var title = payload.target.name;
+
+    var body = [
+      statusIcons[payload.status] + ' ' + payload.status + ': ' + payload.status_code,
+      'was ' + originalDataset.status
+    ].join('\n');
+
+    new Notification(title, {
+      body: body,
+      renotify: true,
+    });
+  }
+
   var customServerAddress = getParameter('server');
   var customFilter = getParameter('filter');
+  var notifications = getParameter('notifications');
 
   var hostname = window.location.hostname;
   var protocol = window.location.protocol == 'https' ? 'wss' : 'ws';
@@ -38,6 +58,17 @@
 
   var serverAddress = customServerAddress || defaultServerAddress;
   var filter = customFilter && new RegExp(customFilter) || /.*/;
+
+  if (notifications === "true") {
+    console.log(window.Notification)
+    if (window.Notification) {
+      Notification.requestPermission(function cb (result) {
+        console.log("notifications request:", result);
+      });
+    } else {
+      console.log("This browser does not support system notifications");
+    }
+  }
 
   console.log('rcanary server address: ' + serverAddress);
   console.log(customServerAddress ? 'set from URL hash' : 'set to default address as hash is empty');
@@ -111,6 +142,10 @@
         var targetEl = document.querySelector(selector);
         var time = formatDatetime(payload.time);
         var timeout_s = 30000; // Rust timeout
+
+        if (targetEl.dataset.updated != null && targetEl.dataset.status !== payload.status) {
+          notify(payload, targetEl.dataset);
+        }
 
         targetEl.dataset.status = payload.status;
         targetEl.dataset.updated = payload.time;

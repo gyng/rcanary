@@ -123,6 +123,14 @@ To display specific targets based off a tag Regex, add a `filter` parameter to t
 
 The parameters can be combined.
 
+### Notifications
+
+To use notifications, add `notifications=true` to the URL. Notifications are disabled by default.
+
+    http://my.dashboard.example.com?notifications=true
+
+Notifications will only show up after initial state has been seeded, and only if notification permissions are granted. State changes are notified.
+
 ## Health check endpoint
 
 Set `health_check_address` in your configuration file for a HTTP health check endpoint to bind to. The health check endpoint will only run if the key is present and will return a HTTP 200 response containing the word `OK`.

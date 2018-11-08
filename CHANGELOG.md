@@ -1,6 +1,7 @@
-# 2018-11-08
+# 2018-11-08 0.4.0
 
 * [BREAKING] Moved `config.alert` to `config.alert.email`
+* Add notifications to dashboard: `http://rcanary.example.com?notifications=true`
 
 # 2017-07-24
 
