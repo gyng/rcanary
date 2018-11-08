@@ -1,3 +1,8 @@
+# 2018-11-08 0.4.0
+
+* [BREAKING] Moved `config.alert` to `config.alert.email`
+* Add notifications to dashboard: `http://rcanary.example.com?notifications=true`
+
 # 2017-07-24
 
 * [BREAKING] Dashboard server specification no longer uses the URL hash. It now uses a `server` URL query parameter `http://rcanary.example.com?server=ws://localhost:8099`

@@ -14,7 +14,7 @@ extern crate time;
 extern crate toml;
 extern crate ws;
 
-mod alert;
+mod alerter;
 mod ws_handler;
 
 use std::collections::HashMap;
@@ -141,14 +141,14 @@ fn main() {
 
         info!("[probe.result] {:?}", &result);
 
-        let is_spam = alert::check_spam(&last_statuses, &result);
-        let is_fixed = alert::check_fixed(&last_statuses, &result);
+        let is_spam = alerter::alert::check_spam(&last_statuses, &result);
+        let is_fixed = alerter::alert::check_fixed(&last_statuses, &result);
         last_statuses.insert(result.target.clone(), result.status.clone());
 
         if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
             let child_config = config.clone();
             let child_result = result.clone();
-            thread::spawn(move || alert::send_alert(&child_config, &child_result));
+            thread::spawn(move || alerter::alert::send_alert(&child_config, &child_result));
         }
 
         if let Ok(json) = serde_json::to_string(&result) {
@@ -164,7 +164,7 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
-    headers.set(UserAgent::new("rcanary/0.2.0"));
+    headers.set(UserAgent::new("rcanary/0.4.0"));
 
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
@@ -234,11 +234,13 @@ mod tests {
         let expected = CanaryConfig {
             alert: CanaryAlertConfig {
                 enabled: true,
-                alert_email: "rcanary.alert.inbox@gmail.com".to_string(),
-                smtp_server: "smtp.googlemail.com".to_string(),
-                smtp_username: "example@gmail.com".to_string(),
-                smtp_password: "hunter2".to_string(),
-                smtp_port: 587,
+                email: Some(CanaryEmailAlertConfig {
+                    alert_email: "rcanary.alert.inbox@gmail.com".to_string(),
+                    smtp_server: "smtp.googlemail.com".to_string(),
+                    smtp_username: "example@gmail.com".to_string(),
+                    smtp_password: "hunter2".to_string(),
+                    smtp_port: 587,
+                }),
             },
             server_listen_address: "127.0.0.1:8099".to_string(),
             health_check_address: Some("127.0.0.1:8100".to_string()),
@@ -256,6 +258,14 @@ mod tests {
                         name: "404".to_string(),
                         host: "http://www.google.com/404".to_string(),
                         tag: Some("example-tag".to_string()),
+                        interval_s: 5,
+                        alert: false,
+                        basic_auth: None,
+                    },
+                    CanaryTarget {
+                        name: "localhost:8080".to_string(),
+                        host: "http://localhost:8080".to_string(),
+                        tag: None,
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,

@@ -7,8 +7,18 @@ use std::fmt;
 use serde::{Serialize, Serializer};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
-pub struct CanaryAlertConfig {
+pub struct CanaryMetricsConfig {
     pub enabled: bool,
+}
+
+impl Default for CanaryMetricsConfig {
+    fn default() -> Self {
+        CanaryMetricsConfig { enabled: false }
+    }
+}
+
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryEmailAlertConfig {
     pub alert_email: String,
     pub smtp_server: String,
     pub smtp_username: String,
@@ -16,15 +26,29 @@ pub struct CanaryAlertConfig {
     pub smtp_port: u16,
 }
 
-impl Default for CanaryAlertConfig {
+impl Default for CanaryEmailAlertConfig {
     fn default() -> Self {
-        CanaryAlertConfig {
-            enabled: false,
+        CanaryEmailAlertConfig {
             alert_email: "".to_string(),
             smtp_server: "".to_string(),
             smtp_username: "".to_string(),
             smtp_password: "".to_string(),
             smtp_port: 0,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryAlertConfig {
+    pub enabled: bool,
+    pub email: Option<CanaryEmailAlertConfig>,
+}
+
+impl Default for CanaryAlertConfig {
+    fn default() -> Self {
+        CanaryAlertConfig {
+            enabled: false,
+            email: None,
         }
     }
 }
