@@ -14,7 +14,7 @@ extern crate time;
 extern crate toml;
 extern crate ws;
 
-mod alert;
+mod alerter;
 mod ws_handler;
 
 use std::collections::HashMap;
@@ -141,14 +141,14 @@ fn main() {
 
         info!("[probe.result] {:?}", &result);
 
-        let is_spam = alert::check_spam(&last_statuses, &result);
-        let is_fixed = alert::check_fixed(&last_statuses, &result);
+        let is_spam = alerter::alert::check_spam(&last_statuses, &result);
+        let is_fixed = alerter::alert::check_fixed(&last_statuses, &result);
         last_statuses.insert(result.target.clone(), result.status.clone());
 
         if config.alert.enabled && result.alert && (is_fixed || result.need_to_alert && !is_spam) {
             let child_config = config.clone();
             let child_result = result.clone();
-            thread::spawn(move || alert::send_alert(&child_config, &child_result));
+            thread::spawn(move || alerter::alert::send_alert(&child_config, &child_result));
         }
 
         if let Ok(json) = serde_json::to_string(&result) {

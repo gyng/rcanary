@@ -1,8 +1,8 @@
 extern crate serde_json;
 extern crate ws;
 
-use crate::CanaryConfig;
 use ws::{Factory, Handler, Sender};
+use CanaryConfig;
 
 pub struct ClientHandler;
 

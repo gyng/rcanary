@@ -1,8 +1,7 @@
 [package]
 name = "rcanary"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
-edition = "2018"
 
 [[bin]]
 name = "rcanary"
