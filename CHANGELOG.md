@@ -1,4 +1,8 @@
-# 2018-11-08 0.4.0
+# 0.5.0 (2018-12-28)
+
+* Add `latency_ms` to probe results
+
+# 0.4.0 (2018-11-08)
 
 * [BREAKING] Moved `config.alert` to `config.alert.email`
 * Add notifications to dashboard: `http://rcanary.example.com?notifications=true`

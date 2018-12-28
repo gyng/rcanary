@@ -91,18 +91,19 @@ impl fmt::Debug for Auth {
 
 impl Serialize for Auth {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str("Auth { ... }")
+        s.serialize_str("redacted")
     }
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryCheck {
-    pub target: CanaryTarget,
-    pub status: Status,
-    pub status_code: String,
-    pub time: String,
     pub alert: bool,
+    pub latency_ms: u64,
     pub need_to_alert: bool,
+    pub status_code: String,
+    pub status: Status,
+    pub target: CanaryTarget,
+    pub time: String,
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]

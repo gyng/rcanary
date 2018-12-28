@@ -25,7 +25,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use docopt::Docopt;
 use hyper::rt::Future;
@@ -65,7 +65,8 @@ fn main() {
                 "[status.startup] failed to read configuration file {}: {}",
                 &args.arg_configuration_file, err
             );
-        }).unwrap();
+        })
+        .unwrap();
 
     // Setup map to save results
     let mut last_statuses = HashMap::new();
@@ -115,7 +116,8 @@ fn main() {
     info!("[status.startup] starting websocker server...");
     let me = ws::WebSocket::new(ws_handler::ClientFactory {
         config: config.clone(),
-    }).unwrap_or_else(|err| {
+    })
+    .unwrap_or_else(|err| {
         panic!("[status.startup] failed to start websocket server {}", err);
     });
     info!("[status.startup] started websocker server.");
@@ -164,7 +166,7 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
-    headers.set(UserAgent::new("rcanary/0.4.0"));
+    headers.set(UserAgent::new("rcanary/0.5.0"));
 
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
@@ -173,6 +175,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         }))
     };
 
+    let latency_timer = Instant::now();
     let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
     let (need_to_alert, status, status_code) = match request {
@@ -188,11 +191,16 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
     };
 
+    let latency = latency_timer.elapsed();
+    let nanos = latency.subsec_nanos() as u64;
+    let latency_ms = (1000 * 1000 * 1000 * latency.as_secs() + nanos) / (1000 * 1000);
+
     CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
         status: status,
         status_code: status_code,
+        latency_ms,
         alert: target.alert,
         need_to_alert: need_to_alert,
     }
@@ -295,12 +303,13 @@ mod tests {
         let actual = check_host(&target());
 
         let expected = CanaryCheck {
+            alert: false,
+            latency_ms: actual.latency_ms,
+            need_to_alert: false,
+            status_code: "bad URL: relative URL without a base".to_string(),
+            status: Status::Unknown,
             target: target(),
             time: actual.time.clone(),
-            status: Status::Unknown,
-            status_code: "bad URL: relative URL without a base".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(expected, actual);
@@ -337,12 +346,13 @@ mod tests {
         let ok_actual = check_host(&ok_target);
 
         let ok_expected = CanaryCheck {
+            alert: false,
+            latency_ms: ok_actual.latency_ms,
+            need_to_alert: false,
+            status_code: "200 OK".to_string(),
+            status: Status::Okay,
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(ok_expected, ok_actual);
@@ -385,12 +395,13 @@ mod tests {
         let ok_actual = check_host(&ok_target);
 
         let ok_expected = CanaryCheck {
+            alert: false,
+            latency_ms: ok_actual.latency_ms,
+            need_to_alert: false,
+            status_code: "200 OK".to_string(),
+            status: Status::Okay,
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(ok_expected, ok_actual);
