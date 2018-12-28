@@ -8,6 +8,8 @@ extern crate reqwest;
 #[macro_use]
 extern crate serde_derive;
 extern crate librcanary;
+#[macro_use]
+extern crate prometheus;
 extern crate serde;
 extern crate serde_json;
 extern crate time;
@@ -15,7 +17,12 @@ extern crate toml;
 extern crate ws;
 
 mod alerter;
+mod metrics;
 mod ws_handler;
+
+use metrics::Metrics;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use std::collections::HashMap;
 use std::env;
@@ -68,6 +75,14 @@ fn main() {
         })
         .unwrap();
 
+    let metrics_handler = if config.metrics.enabled {
+        // TODO: handle multiple types of metrics handlers
+        Some(metrics::prometheus::PrometheusMetrics::new(&config.targets))
+    } else {
+        None
+    };
+    let sharable_metrics_handler = Arc::new(Mutex::new(metrics_handler));
+
     // Setup map to save results
     let mut last_statuses = HashMap::new();
 
@@ -76,9 +91,20 @@ fn main() {
 
     for http_target in config.clone().targets.http {
         let child_poll_tx = poll_tx.clone();
+        let child_metrics = sharable_metrics_handler.clone();
 
         thread::spawn(move || loop {
-            let _ = child_poll_tx.send(check_host(&http_target));
+            let result = check_host(&http_target);
+
+            if let Ok(mutex) = Arc::try_unwrap(child_metrics.clone()) {
+                if let Ok(handler) = mutex.try_lock() {
+                    if let Some(ref metrics) = *handler {
+                        let _ = metrics.update(&http_target.tag_metric.clone().unwrap(), &result);
+                    }
+                }
+            }
+
+            let _ = child_poll_tx.send(result);
             thread::sleep(Duration::new(http_target.interval_s, 0));
         });
     }
@@ -200,6 +226,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         time: format!("{}", time::now_utc().rfc3339()),
         status: status,
         status_code: status_code,
+        status_reason: "unimplemented".to_string(),
         latency_ms,
         alert: target.alert,
         need_to_alert: need_to_alert,
@@ -231,6 +258,7 @@ mod tests {
             name: "foo".to_string(),
             host: "invalid".to_string(),
             tag: Some("tag".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -250,6 +278,7 @@ mod tests {
                     smtp_port: 587,
                 }),
             },
+            metrics: CanaryMetricsConfig { enabled: false },
             server_listen_address: "127.0.0.1:8099".to_string(),
             health_check_address: Some("127.0.0.1:8100".to_string()),
             targets: CanaryTargetTypes {
@@ -258,6 +287,7 @@ mod tests {
                         name: "Invalid".to_string(),
                         host: "Hello, world!".to_string(),
                         tag: None,
+                        tag_metric: Some("hello".to_string()),
                         interval_s: 60,
                         alert: false,
                         basic_auth: None,
@@ -266,6 +296,7 @@ mod tests {
                         name: "404".to_string(),
                         host: "http://www.google.com/404".to_string(),
                         tag: Some("example-tag".to_string()),
+                        tag_metric: Some("http_404".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,
@@ -274,6 +305,7 @@ mod tests {
                         name: "localhost:8080".to_string(),
                         host: "http://localhost:8080".to_string(),
                         tag: None,
+                        tag_metric: Some("local_8080".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,
@@ -282,6 +314,7 @@ mod tests {
                         name: "Google".to_string(),
                         host: "https://www.google.com".to_string(),
                         tag: None,
+                        tag_metric: Some("google".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: Some(Auth {
@@ -308,6 +341,7 @@ mod tests {
             need_to_alert: false,
             status_code: "bad URL: relative URL without a base".to_string(),
             status: Status::Unknown,
+            status_reason: "unimplemented".to_string(),
             target: target(),
             time: actual.time.clone(),
         };
@@ -338,6 +372,7 @@ mod tests {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56473".to_string(),
             tag: Some("bar".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -351,6 +386,7 @@ mod tests {
             need_to_alert: false,
             status_code: "200 OK".to_string(),
             status: Status::Okay,
+            status_reason: "unimplemented".to_string(),
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
         };
@@ -384,6 +420,7 @@ mod tests {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56474".to_string(),
             tag: Some("bar".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: Some(Auth {
@@ -400,6 +437,7 @@ mod tests {
             need_to_alert: false,
             status_code: "200 OK".to_string(),
             status: Status::Okay,
+            status_reason: "unimplemented".to_string(),
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
         };

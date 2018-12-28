@@ -18,12 +18,14 @@ enabled = false
 name = "Invalid"
 host = "Hello, world!"
 interval_s = 60
+tag_metric = "hello"
 alert = false
 
 [[targets.http]]
 name = "404"
 host = "http://www.google.com/404"
 tag = "example-tag"
+tag_metric = "http_404"
 interval_s = 5
 alert = false
 
@@ -31,12 +33,14 @@ alert = false
 name = "localhost:8080"
 host = "http://localhost:8080"
 interval_s = 5
+tag_metric = "local_8080"
 alert = false
 
 [[targets.http]]
 name = "Google"
 host = "https://www.google.com"
 interval_s = 5
+tag_metric = "google"
 alert = false
 
 [targets.http.basic_auth]

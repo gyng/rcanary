@@ -55,11 +55,13 @@ impl Default for CanaryAlertConfig {
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
-    pub targets: CanaryTargetTypes,
-    pub server_listen_address: String,
-    pub health_check_address: Option<String>,
     #[serde(default)]
     pub alert: CanaryAlertConfig,
+    pub health_check_address: Option<String>,
+    #[serde(default)]
+    pub metrics: CanaryMetricsConfig,
+    pub server_listen_address: String,
+    pub targets: CanaryTargetTypes,
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
@@ -69,12 +71,13 @@ pub struct CanaryTargetTypes {
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct CanaryTarget {
-    pub name: String,
-    pub host: String,
-    pub tag: Option<String>,
-    pub interval_s: u64,
     pub alert: bool,
     pub basic_auth: Option<Auth>,
+    pub host: String,
+    pub interval_s: u64,
+    pub name: String,
+    pub tag_metric: Option<String>,
+    pub tag: Option<String>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Hash)]
@@ -101,6 +104,7 @@ pub struct CanaryCheck {
     pub latency_ms: u64,
     pub need_to_alert: bool,
     pub status_code: String,
+    pub status_reason: String,
     pub status: Status,
     pub target: CanaryTarget,
     pub time: String,
