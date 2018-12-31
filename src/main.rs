@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate env_logger;
-extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 extern crate lettre;
 #[macro_use]
 extern crate log;
@@ -22,7 +23,6 @@ mod ws_handler;
 
 use metrics::Metrics;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use std::collections::HashMap;
 use std::env;
@@ -35,9 +35,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use docopt::Docopt;
-use hyper::rt::Future;
-use hyper::service::service_fn_ok;
-use hyper::{Body, Request, Response, Server};
 use librcanary::*;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
@@ -77,11 +74,12 @@ fn main() {
 
     let metrics_handler = if config.metrics.enabled {
         // TODO: handle multiple types of metrics handlers
-        Some(metrics::prometheus::PrometheusMetrics::new(&config.targets))
+        Arc::new(Some(metrics::prometheus::PrometheusMetrics::new(
+            &config.targets,
+        )))
     } else {
-        None
+        Arc::new(None)
     };
-    let sharable_metrics_handler = Arc::new(Mutex::new(metrics_handler));
 
     // Setup map to save results
     let mut last_statuses = HashMap::new();
@@ -91,17 +89,13 @@ fn main() {
 
     for http_target in config.clone().targets.http {
         let child_poll_tx = poll_tx.clone();
-        let child_metrics = sharable_metrics_handler.clone();
+        let child_metrics = metrics_handler.clone();
 
         thread::spawn(move || loop {
             let result = check_host(&http_target);
 
-            if let Ok(mutex) = Arc::try_unwrap(child_metrics.clone()) {
-                if let Ok(handler) = mutex.try_lock() {
-                    if let Some(ref metrics) = *handler {
-                        let _ = metrics.update(&http_target.tag_metric.clone().unwrap(), &result);
-                    }
-                }
+            if let Ok(Some(handler)) = Arc::try_unwrap(child_metrics.clone()) {
+                let _ = handler.update(&http_target.tag_metric.clone().unwrap(), &result);
             }
 
             let _ = child_poll_tx.send(result);
@@ -124,17 +118,33 @@ fn main() {
         );
 
         thread::spawn(move || {
-            fn health_check_handler(_req: Request<Body>) -> Response<Body> {
-                Response::new(Body::from("OK"))
-            }
+            rouille::start_server(health_check_address, move |_req| {
+                rouille::Response::text("OK")
+            });
+        });
+    }
 
-            let test_svc = || service_fn_ok(health_check_handler);
+    // Start metrics endpoint
+    if let Some(metrics_address) = Some("127.0.0.1:9199") {
+        let addr: SocketAddr = metrics_address.parse().unwrap_or_else(|err| {
+            panic!("[status.startup] failed to start metrics endpoint: {}", err);
+        });
 
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
+        info!("[status.startup] starting metrics server at {}...", &addr);
 
-            hyper::rt::run(server);
+        thread::spawn(move || {
+            let child_metrics = metrics_handler.clone();
+
+            rouille::start_server(metrics_address, move |_req| {
+                let child_arc = child_metrics.clone();
+                let body = if let Ok(Some(handler)) = Arc::try_unwrap(child_arc) {
+                    handler.print().unwrap()
+                } else {
+                    "None".to_string()
+                };
+
+                rouille::Response::text(body)
+            });
         });
     }
 
@@ -245,8 +255,15 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
+    extern crate hyper;
+
     use super::*;
     use std::{thread, time};
+
+    // TODO: Convert to rouille
+    use tests::hyper::rt::Future;
+    use tests::hyper::service::service_fn_ok;
+    use tests::hyper::{Body, Request, Response, Server};
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);

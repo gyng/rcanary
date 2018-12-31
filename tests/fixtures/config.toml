@@ -13,6 +13,7 @@ smtp_port = 587
 
 [metrics]
 enabled = false
+# address = "127.0.0.1:9809"
 
 [[targets.http]]
 name = "Invalid"

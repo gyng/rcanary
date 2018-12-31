@@ -1,20 +1,27 @@
+use std::sync::Mutex;
+use std::collections::HashMap;
 use librcanary::CanaryCheck;
 use librcanary::CanaryTargetTypes;
 use metrics::Metrics;
-use std::collections::HashMap;
 
 use prometheus::{Encoder, Gauge, Registry, TextEncoder};
 
+lazy_static! {
+    static ref GAUGES: Mutex<HashMap<String, Gauge>> = {
+        let m = HashMap::new();
+        Mutex::new(m)
+    };
+}
+
 #[derive(Clone)]
 pub struct PrometheusMetrics {
-    pub gauges: HashMap<String, Gauge>,
     pub registry: Registry,
 }
 
 impl Metrics for PrometheusMetrics {
     fn new(targets: &CanaryTargetTypes) -> PrometheusMetrics {
         let registry = Registry::new();
-        let mut gauges: HashMap<String, Gauge> = HashMap::new();
+        // let mut gauges: Map<String, Gauge> = Map::new();
 
         for target in targets.clone().http {
             // We want metrics setup failures to surface ASAP (on startup)
@@ -29,7 +36,7 @@ impl Metrics for PrometheusMetrics {
             registry
                 .register(Box::new(status_gauge.clone()))
                 .expect(&format!("failed to register gauge: {}", tag));
-            gauges.insert(status_tag, status_gauge);
+            GAUGES.lock().unwrap().insert(status_tag, status_gauge);
 
             let latency_tag = format!("{}_latency_ms", &tag);
             let latency_opts = opts!(latency_tag.clone(), format!("latency for {}", &tag));
@@ -38,11 +45,10 @@ impl Metrics for PrometheusMetrics {
             registry
                 .register(Box::new(latency_gauge.clone()))
                 .expect(&format!("failed to register gauge: {}", &tag));
-            gauges.insert(latency_tag, latency_gauge);
+            GAUGES.lock().unwrap().insert(latency_tag, latency_gauge);
         }
 
         PrometheusMetrics {
-            gauges: gauges,
             registry: registry,
         }
     }
@@ -50,21 +56,19 @@ impl Metrics for PrometheusMetrics {
     fn update(&self, tag: &str, result: &CanaryCheck) -> Result<(), String> {
         println!("{:?}", &result);
 
-        let status_gauge = self.gauges.get(&format!("{}_status", tag));
+        let gauges = GAUGES.lock().unwrap();
+
+        let status_gauge = gauges.get(&format!("{}_status", tag));
         if let Some(gauge) = status_gauge {
             gauge.set(result.status_code.parse::<f64>().unwrap_or(-1.0f64));
         }
 
-        let latency_gauge = self.gauges.get(&format!("{}_latency", tag));
+        let latency_gauge = gauges.get(&format!("{}_latency", tag));
         if let Some(gauge) = latency_gauge {
             gauge.set(result.latency_ms as f64);
         }
 
-        if status_gauge.is_some() && latency_gauge.is_some() {
-            Ok(())
-        } else {
-            Err("could not update a gauge".to_string())
-        }
+        Ok(())
     }
 
     fn print(&self) -> Result<String, String> {
