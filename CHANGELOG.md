@@ -1,6 +1,10 @@
-# 0.5.0 (2018-12-28)
+# 0.5.0 (2019-01-02)
 
+* [BREAKING] Move `health_check_server` to `health_check.enabled` and `health_check.address`
+* Add `tag_metric` to targets
 * Add `latency_ms` to probe results
+* Add Prometheus support, configure using `metrics.enabled`, `metrics.address`
+* Removed `hyper` as a direct dependency
 
 # 0.4.0 (2018-11-08)
 
