@@ -255,15 +255,8 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
 
 #[cfg(test)]
 mod tests {
-    extern crate hyper;
-
     use super::*;
     use std::{thread, time};
-
-    // TODO: Convert to rouille
-    use tests::hyper::rt::Future;
-    use tests::hyper::service::service_fn_ok;
-    use tests::hyper::{Body, Request, Response, Server};
 
     fn sleep() {
         let delay = time::Duration::from_millis(250);
@@ -370,18 +363,7 @@ mod tests {
     fn it_checks_valid_target_hosts() {
         static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
-            fn test_handler(_req: Request<Body>) -> Response<Body> {
-                Response::new(Body::from(TEXT))
-            }
-
-            let test_svc = || service_fn_ok(test_handler);
-
-            let addr = ([127, 0, 0, 1], 56473).into();
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
-
-            hyper::rt::run(server);
+            rouille::start_server("127.0.0.1:56473", move |_req| rouille::Response::text(TEXT));
         });
         sleep();
 
@@ -414,22 +396,13 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
-            fn test_handler(req: Request<Body>) -> Response<Body> {
+            rouille::start_server("127.0.0.1:56474", move |req| {
                 assert_eq!(
-                    req.headers().get("Authorization").unwrap(),
+                    req.header("Authorization").unwrap(),
                     "Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=" // hunter2
                 );
-                Response::new(Body::from("OK"))
-            }
-
-            let test_svc = || service_fn_ok(test_handler);
-
-            let addr = ([127, 0, 0, 1], 56474).into();
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
-
-            hyper::rt::run(server);
+                rouille::Response::text("OK")
+            });
         });
         sleep();
 
