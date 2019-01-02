@@ -44,23 +44,27 @@ mod tests {
 
     fn okay_result() -> CanaryCheck {
         CanaryCheck {
+            alert: true,
+            latency_ms: 299,
+            need_to_alert: true,
+            status_code: "200 OK".to_string(),
+            status: Status::Okay,
+            status_reason: "no reason".to_string(),
             target: target(),
             time: "2016-10-14T08:00:00Z".to_string(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: true,
-            need_to_alert: true,
         }
     }
 
     fn fire_result() -> CanaryCheck {
         CanaryCheck {
+            alert: true,
+            latency_ms: 499,
+            need_to_alert: true,
+            status_code: "401 Unauthorized".to_string(),
+            status: Status::Fire,
+            status_reason: "no reason".to_string(),
             target: target(),
             time: "2016-10-14T08:00:00Z".to_string(),
-            status: Status::Fire,
-            status_code: "401 Unauthorized".to_string(),
-            alert: true,
-            need_to_alert: true,
         }
     }
 

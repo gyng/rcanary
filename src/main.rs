@@ -1,6 +1,7 @@
 extern crate docopt;
 extern crate env_logger;
-extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 extern crate lettre;
 #[macro_use]
 extern crate log;
@@ -8,6 +9,8 @@ extern crate reqwest;
 #[macro_use]
 extern crate serde_derive;
 extern crate librcanary;
+#[macro_use]
+extern crate prometheus;
 extern crate serde;
 extern crate serde_json;
 extern crate time;
@@ -15,7 +18,12 @@ extern crate toml;
 extern crate ws;
 
 mod alerter;
+mod metrics;
 mod ws_handler;
+
+use metrics::prometheus::PrometheusMetrics;
+use metrics::Metrics;
+use std::sync::Arc;
 
 use std::collections::HashMap;
 use std::env;
@@ -25,12 +33,9 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use docopt::Docopt;
-use hyper::rt::Future;
-use hyper::service::service_fn_ok;
-use hyper::{Body, Request, Response, Server};
 use librcanary::*;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
@@ -65,7 +70,17 @@ fn main() {
                 "[status.startup] failed to read configuration file {}: {}",
                 &args.arg_configuration_file, err
             );
-        }).unwrap();
+        })
+        .unwrap();
+
+    let metrics_handler = if config.metrics.is_some() && config.clone().metrics.unwrap().enabled {
+        // TODO: handle multiple types of metrics handlers
+        Arc::new(Some(metrics::prometheus::PrometheusMetrics::new(
+            &config.targets,
+        )))
+    } else {
+        Arc::new(None)
+    };
 
     // Setup map to save results
     let mut last_statuses = HashMap::new();
@@ -75,47 +90,39 @@ fn main() {
 
     for http_target in config.clone().targets.http {
         let child_poll_tx = poll_tx.clone();
+        let child_metrics = metrics_handler.clone();
 
         thread::spawn(move || loop {
-            let _ = child_poll_tx.send(check_host(&http_target));
+            let result = check_host(&http_target);
+
+            if let Ok(Some(handler)) = Arc::try_unwrap(child_metrics.clone()) {
+                // It's okay if metrics fail to update (maybe?)
+                let _ = handler.update(&http_target.tag_metric.clone().unwrap(), &result);
+            }
+
+            let _ = child_poll_tx.send(result);
             thread::sleep(Duration::new(http_target.interval_s, 0));
         });
     }
 
-    // Start healthcheck endpoint
-    if let Some(health_check_address) = config.clone().health_check_address {
-        let addr: SocketAddr = health_check_address.parse().unwrap_or_else(|err| {
-            panic!(
-                "[status.startup] failed to start health check endpoint: {}",
-                err
-            );
-        });
+    if let Some(health_check_config) = config.clone().health_check {
+        if health_check_config.enabled {
+            start_healthcheck_server(&health_check_config.address);
+        }
+    }
 
-        info!(
-            "[status.startup] starting health check server at {}...",
-            &addr
-        );
-
-        thread::spawn(move || {
-            fn health_check_handler(_req: Request<Body>) -> Response<Body> {
-                Response::new(Body::from("OK"))
-            }
-
-            let test_svc = || service_fn_ok(health_check_handler);
-
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
-
-            hyper::rt::run(server);
-        });
+    if let Some(metrics_config) = config.clone().metrics {
+        if metrics_config.enabled {
+            start_metrics_server(&metrics_config.address, metrics_handler);
+        }
     }
 
     // Start up websocket server
     info!("[status.startup] starting websocker server...");
     let me = ws::WebSocket::new(ws_handler::ClientFactory {
         config: config.clone(),
-    }).unwrap_or_else(|err| {
+    })
+    .unwrap_or_else(|err| {
         panic!("[status.startup] failed to start websocket server {}", err);
     });
     info!("[status.startup] started websocker server.");
@@ -164,7 +171,7 @@ fn main() {
 
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let mut headers = Headers::new();
-    headers.set(UserAgent::new("rcanary/0.4.0"));
+    headers.set(UserAgent::new("rcanary/0.5.0"));
 
     if let Some(ref a) = target.basic_auth {
         headers.set(Authorization(Basic {
@@ -173,6 +180,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         }))
     };
 
+    let latency_timer = Instant::now();
     let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
     let (need_to_alert, status, status_code) = match request {
@@ -188,11 +196,17 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
     };
 
+    let latency = latency_timer.elapsed();
+    let nanos = latency.subsec_nanos() as u64;
+    let latency_ms = (1000 * 1000 * 1000 * latency.as_secs() + nanos) / (1000 * 1000);
+
     CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
         status: status,
         status_code: status_code,
+        status_reason: "unimplemented".to_string(),
+        latency_ms,
         alert: target.alert,
         need_to_alert: need_to_alert,
     }
@@ -206,6 +220,47 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
     info!("[status.startup] read configuration file.");
 
     Ok(toml::from_str(&config_toml)?)
+}
+
+fn start_metrics_server(bind_to: &str, metrics_handler: Arc<Option<PrometheusMetrics>>) {
+    let addr: SocketAddr = bind_to.parse().unwrap_or_else(|err| {
+        panic!("[status.startup] failed to start metrics endpoint: {}", err);
+    });
+
+    info!("[status.startup] starting metrics server at {}...", &addr);
+
+    thread::spawn(move || {
+        let child_metrics = metrics_handler.clone();
+
+        rouille::start_server(addr, move |_req| {
+            let child_arc = child_metrics.clone();
+            let body = if let Ok(Some(handler)) = Arc::try_unwrap(child_arc) {
+                handler.print().unwrap()
+            } else {
+                "None".to_string()
+            };
+
+            rouille::Response::text(body)
+        });
+    });
+}
+
+fn start_healthcheck_server(bind_to: &str) {
+    let addr: SocketAddr = bind_to.parse().unwrap_or_else(|err| {
+        panic!(
+            "[status.startup] failed to start health check endpoint: {}",
+            err
+        );
+    });
+
+    info!(
+        "[status.startup] starting health check server at {}...",
+        &addr
+    );
+
+    thread::spawn(move || {
+        rouille::start_server(addr, move |_req| rouille::Response::text("OK"));
+    });
 }
 
 #[cfg(test)]
@@ -223,6 +278,7 @@ mod tests {
             name: "foo".to_string(),
             host: "invalid".to_string(),
             tag: Some("tag".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -242,14 +298,22 @@ mod tests {
                     smtp_port: 587,
                 }),
             },
+            metrics: Some(CanaryMetricsConfig {
+                enabled: false,
+                address: "127.0.0.1:9809".to_string(),
+            }),
+            health_check: Some(CanaryHealthCheckConfig {
+                enabled: true,
+                address: "127.0.0.1:8100".to_string(),
+            }),
             server_listen_address: "127.0.0.1:8099".to_string(),
-            health_check_address: Some("127.0.0.1:8100".to_string()),
             targets: CanaryTargetTypes {
                 http: vec![
                     CanaryTarget {
                         name: "Invalid".to_string(),
                         host: "Hello, world!".to_string(),
                         tag: None,
+                        tag_metric: Some("hello".to_string()),
                         interval_s: 60,
                         alert: false,
                         basic_auth: None,
@@ -258,6 +322,7 @@ mod tests {
                         name: "404".to_string(),
                         host: "http://www.google.com/404".to_string(),
                         tag: Some("example-tag".to_string()),
+                        tag_metric: Some("http_404".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,
@@ -266,6 +331,7 @@ mod tests {
                         name: "localhost:8080".to_string(),
                         host: "http://localhost:8080".to_string(),
                         tag: None,
+                        tag_metric: Some("local_8080".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: None,
@@ -274,6 +340,7 @@ mod tests {
                         name: "Google".to_string(),
                         host: "https://www.google.com".to_string(),
                         tag: None,
+                        tag_metric: Some("google".to_string()),
                         interval_s: 5,
                         alert: false,
                         basic_auth: Some(Auth {
@@ -295,12 +362,14 @@ mod tests {
         let actual = check_host(&target());
 
         let expected = CanaryCheck {
+            alert: false,
+            latency_ms: actual.latency_ms,
+            need_to_alert: false,
+            status_code: "bad URL: relative URL without a base".to_string(),
+            status: Status::Unknown,
+            status_reason: "unimplemented".to_string(),
             target: target(),
             time: actual.time.clone(),
-            status: Status::Unknown,
-            status_code: "bad URL: relative URL without a base".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(expected, actual);
@@ -310,18 +379,7 @@ mod tests {
     fn it_checks_valid_target_hosts() {
         static TEXT: &'static str = "I love BGP";
         thread::spawn(move || {
-            fn test_handler(_req: Request<Body>) -> Response<Body> {
-                Response::new(Body::from(TEXT))
-            }
-
-            let test_svc = || service_fn_ok(test_handler);
-
-            let addr = ([127, 0, 0, 1], 56473).into();
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
-
-            hyper::rt::run(server);
+            rouille::start_server("127.0.0.1:56473", move |_req| rouille::Response::text(TEXT));
         });
         sleep();
 
@@ -329,6 +387,7 @@ mod tests {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56473".to_string(),
             tag: Some("bar".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: None,
@@ -337,12 +396,14 @@ mod tests {
         let ok_actual = check_host(&ok_target);
 
         let ok_expected = CanaryCheck {
+            alert: false,
+            latency_ms: ok_actual.latency_ms,
+            need_to_alert: false,
+            status_code: "200 OK".to_string(),
+            status: Status::Okay,
+            status_reason: "unimplemented".to_string(),
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(ok_expected, ok_actual);
@@ -351,22 +412,13 @@ mod tests {
     #[test]
     fn it_checks_valid_target_hosts_with_basic_auth() {
         thread::spawn(move || {
-            fn test_handler(req: Request<Body>) -> Response<Body> {
+            rouille::start_server("127.0.0.1:56474", move |req| {
                 assert_eq!(
-                    req.headers().get("Authorization").unwrap(),
+                    req.header("Authorization").unwrap(),
                     "Basic QXp1cmVEaWFtb25kOmh1bnRlcjI=" // hunter2
                 );
-                Response::new(Body::from("OK"))
-            }
-
-            let test_svc = || service_fn_ok(test_handler);
-
-            let addr = ([127, 0, 0, 1], 56474).into();
-            let server = Server::bind(&addr)
-                .serve(test_svc)
-                .map_err(|e| eprintln!("server error: {}", e));
-
-            hyper::rt::run(server);
+                rouille::Response::text("OK")
+            });
         });
         sleep();
 
@@ -374,6 +426,7 @@ mod tests {
             name: "foo".to_string(),
             host: "http://127.0.0.1:56474".to_string(),
             tag: Some("bar".to_string()),
+            tag_metric: None,
             interval_s: 1,
             alert: false,
             basic_auth: Some(Auth {
@@ -385,12 +438,14 @@ mod tests {
         let ok_actual = check_host(&ok_target);
 
         let ok_expected = CanaryCheck {
+            alert: false,
+            latency_ms: ok_actual.latency_ms,
+            need_to_alert: false,
+            status_code: "200 OK".to_string(),
+            status: Status::Okay,
+            status_reason: "unimplemented".to_string(),
             target: ok_target.clone(),
             time: ok_actual.time.clone(),
-            status: Status::Okay,
-            status_code: "200 OK".to_string(),
-            alert: false,
-            need_to_alert: false,
         };
 
         assert_eq!(ok_expected, ok_actual);

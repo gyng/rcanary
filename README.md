@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/gyng/rcanary.svg?branch=master)](https://travis-ci.org/gyng/rcanary)
 
-A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. Supports basic auth for HTTP targets. rcanary exposes a websocket server for dashboards to connect to.
+A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. Also supports basic auth for HTTP targets and Prometheus metrics. rcanary exposes a websocket server for dashboards to connect to.
 
 # Usage
 
@@ -32,7 +32,7 @@ fn main {
 
 ## Basic auth
 
-Add this below any target in `config.toml`
+Add this below any target in `config.toml` to add basic auth to it
 
 ```toml
 [targets.http.basic_auth]
@@ -133,9 +133,34 @@ Notifications will only show up after initial state has been seeded, and only if
 
 ## Health check endpoint
 
-Set `health_check_address` in your configuration file for a HTTP health check endpoint to bind to. The health check endpoint will only run if the key is present and will return a HTTP 200 response containing the word `OK`.
+Set `health_check.enabled` and `health_check.address` in your configuration file. The health check endpoint will only run if it is enabled and an address is specified. It will return a HTTP 200 response containing the word `OK`.
 
-    health_check_address = "127.0.0.1:8100"
+```toml
+[health_check]
+enabled = true
+address = "127.0.0.1:8100"
+```
+
+## Prometheus metrics
+
+Set `metrics.enabled` and `metrics.address` in your configuration file. The metrics endpoint will only run if it is enabled and an address is specified.
+
+```toml
+[metrics]
+enabled = true
+address = "127.0.0.1:9809"
+```
+
+You should see something like the following when you visit the defined endpoint
+
+```
+# HELP some_target_latency_ms latency for some_target
+# TYPE some_target_latency_ms gauge
+some_target_latency_ms 125
+# HELP some_target_status status for some_target
+# TYPE some_target_status gauge
+some_target_status 200
+```
 
 # License
 

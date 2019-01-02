@@ -1,5 +1,4 @@
 server_listen_address = "127.0.0.1:8099"
-health_check_address = "127.0.0.1:8100"
 
 [alert]
 enabled = true
@@ -11,19 +10,26 @@ smtp_username = "example@gmail.com"
 smtp_password = "hunter2"
 smtp_port = 587
 
+[health_check]
+enabled = true
+address = "127.0.0.1:8100"
+
 [metrics]
 enabled = false
+address = "127.0.0.1:9809"
 
 [[targets.http]]
 name = "Invalid"
 host = "Hello, world!"
 interval_s = 60
+tag_metric = "hello"
 alert = false
 
 [[targets.http]]
 name = "404"
 host = "http://www.google.com/404"
 tag = "example-tag"
+tag_metric = "http_404"
 interval_s = 5
 alert = false
 
@@ -31,12 +37,14 @@ alert = false
 name = "localhost:8080"
 host = "http://localhost:8080"
 interval_s = 5
+tag_metric = "local_8080"
 alert = false
 
 [[targets.http]]
 name = "Google"
 host = "https://www.google.com"
 interval_s = 5
+tag_metric = "google"
 alert = false
 
 [targets.http.basic_auth]

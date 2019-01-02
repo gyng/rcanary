@@ -1,6 +1,6 @@
 [package]
 name = "rcanary"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Ng Guoyou <ng.guoyou@gmail.com>"]
 
 [[bin]]
@@ -11,16 +11,18 @@ test = true
 [dependencies]
 docopt = "0.8.1"
 env_logger = "0.4"
-hyper = "0.12"
+lazy_static = "1.2"
 lettre = "0.6"
+librcanary = { path = "librcanary" }
 log = "0.3"
+prometheus = "0.4"
 reqwest = "0.7.2"
+rouille = "3.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 time = "0.1"
 toml = "0.4"
 ws = "0.7"
-librcanary = { path = "librcanary" }
 
 [workspace]

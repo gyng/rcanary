@@ -8,12 +8,31 @@ use serde::{Serialize, Serializer};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryMetricsConfig {
+    pub address: String,
     pub enabled: bool,
 }
 
 impl Default for CanaryMetricsConfig {
     fn default() -> Self {
-        CanaryMetricsConfig { enabled: false }
+        CanaryMetricsConfig {
+            address: "".to_string(),
+            enabled: false,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryHealthCheckConfig {
+    pub address: String,
+    pub enabled: bool,
+}
+
+impl Default for CanaryHealthCheckConfig {
+    fn default() -> Self {
+        CanaryHealthCheckConfig {
+            address: "".to_string(),
+            enabled: false,
+        }
     }
 }
 
@@ -55,11 +74,14 @@ impl Default for CanaryAlertConfig {
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryConfig {
-    pub targets: CanaryTargetTypes,
-    pub server_listen_address: String,
-    pub health_check_address: Option<String>,
     #[serde(default)]
     pub alert: CanaryAlertConfig,
+    #[serde(default)]
+    pub health_check: Option<CanaryHealthCheckConfig>,
+    #[serde(default)]
+    pub metrics: Option<CanaryMetricsConfig>,
+    pub server_listen_address: String,
+    pub targets: CanaryTargetTypes,
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
@@ -69,12 +91,13 @@ pub struct CanaryTargetTypes {
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct CanaryTarget {
-    pub name: String,
-    pub host: String,
-    pub tag: Option<String>,
-    pub interval_s: u64,
     pub alert: bool,
     pub basic_auth: Option<Auth>,
+    pub host: String,
+    pub interval_s: u64,
+    pub name: String,
+    pub tag_metric: Option<String>,
+    pub tag: Option<String>,
 }
 
 #[derive(Deserialize, Eq, PartialEq, Clone, Hash)]
@@ -91,18 +114,20 @@ impl fmt::Debug for Auth {
 
 impl Serialize for Auth {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str("Auth { ... }")
+        s.serialize_str("redacted")
     }
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryCheck {
-    pub target: CanaryTarget,
-    pub status: Status,
-    pub status_code: String,
-    pub time: String,
     pub alert: bool,
+    pub latency_ms: u64,
     pub need_to_alert: bool,
+    pub status_code: String,
+    pub status_reason: String,
+    pub status: Status,
+    pub target: CanaryTarget,
+    pub time: String,
 }
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]

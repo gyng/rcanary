@@ -158,6 +158,10 @@
 
         targetEl.querySelector('.probe-status').textContent = payload.status_code;
         targetEl.querySelector('.probe-time').textContent = time;
+        targetEl.querySelector('.probe-latency').textContent =
+          payload.latency_ms != null
+            ? `${payload.latency_ms}ms`
+            : '?';
         targetEl.querySelector('.probe-link').href = payload.target.host;
         if (payload.status === 'Okay') {
           targetEl.querySelector('.probe-last-okay').textContent = 'Last OK: ' + formatDatetime(payload.time);
