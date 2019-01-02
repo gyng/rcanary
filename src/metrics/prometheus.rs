@@ -1,8 +1,8 @@
-use std::sync::Mutex;
-use std::collections::HashMap;
 use librcanary::CanaryCheck;
 use librcanary::CanaryTargetTypes;
 use metrics::Metrics;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 use prometheus::{Encoder, Gauge, Registry, TextEncoder};
 
@@ -21,7 +21,6 @@ pub struct PrometheusMetrics {
 impl Metrics for PrometheusMetrics {
     fn new(targets: &CanaryTargetTypes) -> PrometheusMetrics {
         let registry = Registry::new();
-        // let mut gauges: Map<String, Gauge> = Map::new();
 
         for target in targets.clone().http {
             // We want metrics setup failures to surface ASAP (on startup)
@@ -36,7 +35,10 @@ impl Metrics for PrometheusMetrics {
             registry
                 .register(Box::new(status_gauge.clone()))
                 .expect(&format!("failed to register gauge: {}", tag));
-            GAUGES.lock().unwrap().insert(status_tag, status_gauge);
+            GAUGES
+                .lock()
+                .expect("GAUGES mutex is poisoned")
+                .insert(status_tag, status_gauge);
 
             let latency_tag = format!("{}_latency_ms", &tag);
             let latency_opts = opts!(latency_tag.clone(), format!("latency for {}", &tag));
@@ -45,27 +47,28 @@ impl Metrics for PrometheusMetrics {
             registry
                 .register(Box::new(latency_gauge.clone()))
                 .expect(&format!("failed to register gauge: {}", &tag));
-            GAUGES.lock().unwrap().insert(latency_tag, latency_gauge);
+            GAUGES
+                .lock()
+                .expect("GAUGES mutex is poisoned")
+                .insert(latency_tag, latency_gauge);
         }
 
-        PrometheusMetrics {
-            registry: registry,
-        }
+        PrometheusMetrics { registry: registry }
     }
 
     fn update(&self, tag: &str, result: &CanaryCheck) -> Result<(), String> {
-        println!("{:?}", &result);
+        if let Ok(gauges) = GAUGES.lock() {
+            let status_gauge = gauges.get(&format!("{}_status", tag));
+            if let Some(gauge) = status_gauge {
+                gauge.set(result.status_code.parse::<f64>().unwrap_or(-1.0f64));
+            }
 
-        let gauges = GAUGES.lock().unwrap();
-
-        let status_gauge = gauges.get(&format!("{}_status", tag));
-        if let Some(gauge) = status_gauge {
-            gauge.set(result.status_code.parse::<f64>().unwrap_or(-1.0f64));
-        }
-
-        let latency_gauge = gauges.get(&format!("{}_latency", tag));
-        if let Some(gauge) = latency_gauge {
-            gauge.set(result.latency_ms as f64);
+            let latency_gauge = gauges.get(&format!("{}_latency", tag));
+            if let Some(gauge) = latency_gauge {
+                gauge.set(result.latency_ms as f64);
+            }
+        } else {
+            return Err("Failed to update gauges: GAUGES mutex is poisoned".to_string());
         }
 
         Ok(())

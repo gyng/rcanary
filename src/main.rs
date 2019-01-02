@@ -96,6 +96,7 @@ fn main() {
             let result = check_host(&http_target);
 
             if let Ok(Some(handler)) = Arc::try_unwrap(child_metrics.clone()) {
+                // It's okay if metrics fail to update (maybe?)
                 let _ = handler.update(&http_target.tag_metric.clone().unwrap(), &result);
             }
 
