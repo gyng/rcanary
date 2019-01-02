@@ -8,12 +8,31 @@ use serde::{Serialize, Serializer};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
 pub struct CanaryMetricsConfig {
+    pub address: String,
     pub enabled: bool,
 }
 
 impl Default for CanaryMetricsConfig {
     fn default() -> Self {
-        CanaryMetricsConfig { enabled: false }
+        CanaryMetricsConfig {
+            address: "".to_string(),
+            enabled: false,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Eq, PartialEq, Clone, Debug)]
+pub struct CanaryHealthCheckConfig {
+    pub address: String,
+    pub enabled: bool,
+}
+
+impl Default for CanaryHealthCheckConfig {
+    fn default() -> Self {
+        CanaryHealthCheckConfig {
+            address: "".to_string(),
+            enabled: false,
+        }
     }
 }
 
@@ -57,9 +76,10 @@ impl Default for CanaryAlertConfig {
 pub struct CanaryConfig {
     #[serde(default)]
     pub alert: CanaryAlertConfig,
-    pub health_check_address: Option<String>,
     #[serde(default)]
-    pub metrics: CanaryMetricsConfig,
+    pub health_check: Option<CanaryHealthCheckConfig>,
+    #[serde(default)]
+    pub metrics: Option<CanaryMetricsConfig>,
     pub server_listen_address: String,
     pub targets: CanaryTargetTypes,
 }

@@ -21,6 +21,7 @@ mod alerter;
 mod metrics;
 mod ws_handler;
 
+use metrics::prometheus::PrometheusMetrics;
 use metrics::Metrics;
 use std::sync::Arc;
 
@@ -72,7 +73,7 @@ fn main() {
         })
         .unwrap();
 
-    let metrics_handler = if config.metrics.enabled {
+    let metrics_handler = if config.metrics.is_some() && config.clone().metrics.unwrap().enabled {
         // TODO: handle multiple types of metrics handlers
         Arc::new(Some(metrics::prometheus::PrometheusMetrics::new(
             &config.targets,
@@ -103,49 +104,16 @@ fn main() {
         });
     }
 
-    // Start healthcheck endpoint
-    if let Some(health_check_address) = config.clone().health_check_address {
-        let addr: SocketAddr = health_check_address.parse().unwrap_or_else(|err| {
-            panic!(
-                "[status.startup] failed to start health check endpoint: {}",
-                err
-            );
-        });
-
-        info!(
-            "[status.startup] starting health check server at {}...",
-            &addr
-        );
-
-        thread::spawn(move || {
-            rouille::start_server(health_check_address, move |_req| {
-                rouille::Response::text("OK")
-            });
-        });
+    if let Some(health_check_config) = config.clone().health_check {
+        if health_check_config.enabled {
+            start_healthcheck_server(&health_check_config.address);
+        }
     }
 
-    // Start metrics endpoint
-    if let Some(metrics_address) = Some("127.0.0.1:9199") {
-        let addr: SocketAddr = metrics_address.parse().unwrap_or_else(|err| {
-            panic!("[status.startup] failed to start metrics endpoint: {}", err);
-        });
-
-        info!("[status.startup] starting metrics server at {}...", &addr);
-
-        thread::spawn(move || {
-            let child_metrics = metrics_handler.clone();
-
-            rouille::start_server(metrics_address, move |_req| {
-                let child_arc = child_metrics.clone();
-                let body = if let Ok(Some(handler)) = Arc::try_unwrap(child_arc) {
-                    handler.print().unwrap()
-                } else {
-                    "None".to_string()
-                };
-
-                rouille::Response::text(body)
-            });
-        });
+    if let Some(metrics_config) = config.clone().metrics {
+        if metrics_config.enabled {
+            start_metrics_server(&metrics_config.address, metrics_handler);
+        }
     }
 
     // Start up websocket server
@@ -253,6 +221,47 @@ fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
     Ok(toml::from_str(&config_toml)?)
 }
 
+fn start_metrics_server(bind_to: &str, metrics_handler: Arc<Option<PrometheusMetrics>>) {
+    let addr: SocketAddr = bind_to.parse().unwrap_or_else(|err| {
+        panic!("[status.startup] failed to start metrics endpoint: {}", err);
+    });
+
+    info!("[status.startup] starting metrics server at {}...", &addr);
+
+    thread::spawn(move || {
+        let child_metrics = metrics_handler.clone();
+
+        rouille::start_server(addr, move |_req| {
+            let child_arc = child_metrics.clone();
+            let body = if let Ok(Some(handler)) = Arc::try_unwrap(child_arc) {
+                handler.print().unwrap()
+            } else {
+                "None".to_string()
+            };
+
+            rouille::Response::text(body)
+        });
+    });
+}
+
+fn start_healthcheck_server(bind_to: &str) {
+    let addr: SocketAddr = bind_to.parse().unwrap_or_else(|err| {
+        panic!(
+            "[status.startup] failed to start health check endpoint: {}",
+            err
+        );
+    });
+
+    info!(
+        "[status.startup] starting health check server at {}...",
+        &addr
+    );
+
+    thread::spawn(move || {
+        rouille::start_server(addr, move |_req| rouille::Response::text("OK"));
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,9 +297,15 @@ mod tests {
                     smtp_port: 587,
                 }),
             },
-            metrics: CanaryMetricsConfig { enabled: false },
+            metrics: Some(CanaryMetricsConfig {
+                enabled: false,
+                address: "127.0.0.1:9809".to_string(),
+            }),
+            health_check: Some(CanaryHealthCheckConfig {
+                enabled: true,
+                address: "127.0.0.1:8100".to_string(),
+            }),
             server_listen_address: "127.0.0.1:8099".to_string(),
-            health_check_address: Some("127.0.0.1:8100".to_string()),
             targets: CanaryTargetTypes {
                 http: vec![
                     CanaryTarget {

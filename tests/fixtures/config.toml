@@ -1,5 +1,4 @@
 server_listen_address = "127.0.0.1:8099"
-health_check_address = "127.0.0.1:8100"
 
 [alert]
 enabled = true
@@ -11,9 +10,13 @@ smtp_username = "example@gmail.com"
 smtp_password = "hunter2"
 smtp_port = 587
 
+[health_check]
+enabled = true
+address = "127.0.0.1:8100"
+
 [metrics]
 enabled = false
-# address = "127.0.0.1:9809"
+address = "127.0.0.1:9809"
 
 [[targets.http]]
 name = "Invalid"
