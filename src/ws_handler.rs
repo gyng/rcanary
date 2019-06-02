@@ -1,5 +1,5 @@
-use ws::{Factory, Handler, Sender};
 use crate::CanaryConfig;
+use ws::{Factory, Handler, Sender};
 
 pub struct ClientHandler;
 

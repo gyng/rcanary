@@ -1,3 +1,6 @@
+#![feature(async_await)]
+#![recursion_limit = "128"]
+
 extern crate docopt;
 extern crate env_logger;
 #[macro_use]
@@ -5,8 +8,8 @@ extern crate lazy_static;
 extern crate lettre;
 #[macro_use]
 extern crate log;
-extern crate reqwest;
 extern crate librcanary;
+extern crate reqwest;
 #[macro_use]
 extern crate prometheus;
 extern crate serde;
@@ -16,6 +19,7 @@ extern crate toml;
 extern crate ws;
 
 mod alerter;
+mod checkengine;
 mod metrics;
 mod ws_handler;
 
@@ -56,8 +60,24 @@ struct Args {
 }
 
 fn main() {
-    env::set_var("RUST_LOG", "rcanary=info,ws=info"); // TODO: use a proper logger
     env_logger::init().unwrap();
+
+    use futures::compat::{Compat};
+    use futures::prelude::FutureExt;
+
+    use self::checkengine::{Check, HttpTarget, HttpCheck};
+
+    let future03 = HttpCheck.check(HttpTarget {
+            url: "http://aibi.yshi.org".parse().unwrap(),
+        }).map(|x| {
+            println!("x = {:?}", x);
+            Ok(())
+        });
+
+    let future01 = Compat::new(future03);
+    tokio::run(future01);
+
+    return;
 
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
