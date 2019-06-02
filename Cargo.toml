@@ -15,7 +15,7 @@ lazy_static = "1.2"
 lettre = "0.6"
 librcanary = { path = "librcanary" }
 log = "0.3"
-prometheus = "0.4"
+prometheus = "0.6"
 reqwest = "0.7.2"
 rouille = "3.0"
 serde = "1.0"
