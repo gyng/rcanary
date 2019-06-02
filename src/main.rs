@@ -39,7 +39,7 @@ use docopt::Docopt;
 use librcanary::*;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 rcanary
 A minimal monitoring program with email alerts
 
@@ -203,12 +203,12 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
-        status: status,
-        status_code: status_code,
+        status,
+        status_code,
         status_reason: "unimplemented".to_string(),
         latency_ms,
         alert: target.alert,
-        need_to_alert: need_to_alert,
+        need_to_alert,
     }
 }
 
