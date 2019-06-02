@@ -6,8 +6,6 @@ extern crate lettre;
 #[macro_use]
 extern crate log;
 extern crate reqwest;
-#[macro_use]
-extern crate serde_derive;
 extern crate librcanary;
 #[macro_use]
 extern crate prometheus;
@@ -38,6 +36,7 @@ use std::time::{Duration, Instant};
 use docopt::Docopt;
 use librcanary::*;
 use reqwest::header::{Authorization, Basic, Headers, UserAgent};
+use serde::Deserialize;
 
 const USAGE: &str = "
 rcanary
