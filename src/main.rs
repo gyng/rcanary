@@ -88,7 +88,7 @@ fn main() {
     // Start polling
     let (poll_tx, poll_rx) = mpsc::channel();
 
-    for http_target in config.clone().targets.http {
+    for http_target in config.targets.http.clone() {
         let child_poll_tx = poll_tx.clone();
         let child_metrics = metrics_handler.clone();
 
@@ -105,13 +105,13 @@ fn main() {
         });
     }
 
-    if let Some(health_check_config) = config.clone().health_check {
+    if let Some(ref health_check_config) = config.health_check {
         if health_check_config.enabled {
             start_healthcheck_server(&health_check_config.address);
         }
     }
 
-    if let Some(metrics_config) = config.clone().metrics {
+    if let Some(ref metrics_config) = config.metrics {
         if metrics_config.enabled {
             start_metrics_server(&metrics_config.address, metrics_handler);
         }
@@ -197,7 +197,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     };
 
     let latency = latency_timer.elapsed();
-    let nanos = latency.subsec_nanos() as u64;
+    let nanos = u64::from(latency.subsec_nanos());
     let latency_ms = (1000 * 1000 * 1000 * latency.as_secs() + nanos) / (1000 * 1000);
 
     CanaryCheck {
