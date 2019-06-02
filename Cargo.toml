@@ -16,7 +16,7 @@ lettre = "0.6"
 librcanary = { path = "librcanary" }
 log = "0.3"
 prometheus = "0.4"
-reqwest = "0.7.2"
+reqwest = "0.9.5"
 rouille = "3.0"
 serde = "1.0"
 serde_derive = "1.0"
