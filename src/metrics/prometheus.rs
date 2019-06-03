@@ -24,6 +24,7 @@ impl Metrics for PrometheusMetrics {
 
         for target in targets.clone().http {
             // We want metrics setup failures to surface ASAP (on startup)
+            #[allow(clippy::expect_fun_call)] // borrow-ck issue, might go away with NLL?
             let tag = target
                 .tag_metric
                 .expect(&format!("Missing tag_metric for {:?}", target.host));
@@ -31,10 +32,10 @@ impl Metrics for PrometheusMetrics {
             let status_tag = format!("{}_status", tag);
             let status_opts = opts!(status_tag.clone(), format!("status for {}", tag));
             let status_gauge = Gauge::with_opts(status_opts)
-                .expect(&format!("failed to create status gauge for {}", tag));
+                .unwrap_or_else(|_| panic!("failed to create status gauge for {}", tag));
             registry
                 .register(Box::new(status_gauge.clone()))
-                .expect(&format!("failed to register gauge: {}", tag));
+                .unwrap_or_else(|_| panic!("failed to register gauge: {}", tag));
             GAUGES
                 .lock()
                 .expect("GAUGES mutex is poisoned")
@@ -43,17 +44,17 @@ impl Metrics for PrometheusMetrics {
             let latency_tag = format!("{}_latency_ms", &tag);
             let latency_opts = opts!(latency_tag.clone(), format!("latency for {}", &tag));
             let latency_gauge = register_gauge!(latency_opts)
-                .expect(&format!("failed to create latency gauge for {}", &tag));
+                .unwrap_or_else(|_| panic!("failed to create latency gauge for {}", &tag));
             registry
                 .register(Box::new(latency_gauge.clone()))
-                .expect(&format!("failed to register gauge: {}", &tag));
+                .unwrap_or_else(|_| panic!("failed to register gauge: {}", &tag));
             GAUGES
                 .lock()
                 .expect("GAUGES mutex is poisoned")
                 .insert(latency_tag, latency_gauge);
         }
 
-        PrometheusMetrics { registry: registry }
+        PrometheusMetrics { registry }
     }
 
     fn update(&self, tag: &str, result: &CanaryCheck) -> Result<(), String> {
@@ -83,7 +84,7 @@ impl Metrics for PrometheusMetrics {
         if encoded_result.is_ok() {
             // Should be OK
             Ok(String::from_utf8(buffer)
-                .unwrap_or("failed to create string from buffer".to_string()))
+                .unwrap_or_else(|_| "failed to create string from buffer".to_string()))
         } else {
             Err("failed to encode printable output".to_string())
         }
