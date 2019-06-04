@@ -68,7 +68,7 @@ fn main() {
     use self::checkengine::{Check, HttpTarget, HttpCheck};
 
     let future03 = HttpCheck.check(HttpTarget {
-            url: "http://aibi.yshi.org".parse().unwrap(),
+            url: "https://aibi.yshi.org".parse().unwrap(),
         }).map(|x| {
             println!("x = {:?}", x);
             Ok(())

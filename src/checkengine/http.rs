@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::io;
 use std::net::{IpAddr, ToSocketAddrs};
 use std::pin::Pin;
@@ -7,6 +6,8 @@ use futures::compat::{Compat, Future01CompatExt};
 use futures::future::{self, join_all, Future, FutureExt, Ready};
 use hyper::client::connect::dns::Name;
 use hyper::Uri;
+use native_tls::{self, TlsConnector};
+use hyper_tls::HttpsConnector;
 
 use super::{Check, CheckFailure, CheckResult};
 
@@ -109,9 +110,12 @@ async fn connect_and_request(ip_addr: IpAddr, target: Uri) -> CheckResult {
     use hyper::client::{Client, HttpConnector};
 
     debug!("connect_and_request: connecting to {}", ip_addr);
-    let connector = HttpConnector::new_with_resolver(StaticResolverSingle { ip_addr });
+    let http_connector = HttpConnector::new_with_resolver(StaticResolverSingle { ip_addr });
+    let tls_connector = TlsConnector::builder().build().unwrap();
+    let connector = HttpsConnector::from((http_connector, tls_connector));
 
     let client: Client<_> = Client::builder().build(connector);
+    debug!("configured client with https");
     let resp: hyper::Response<_> = match client.get(target).compat().await {
         Ok(r) => r,
         Err(err) => {
