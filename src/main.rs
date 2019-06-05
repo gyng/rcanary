@@ -23,9 +23,9 @@ mod checkengine;
 mod metrics;
 mod ws_handler;
 
+use checkengine::{Check, CheckStatus, HttpCheck, HttpTarget};
 use metrics::prometheus::PrometheusMetrics;
 use metrics::Metrics;
-use std::sync::Arc;
 
 use std::collections::HashMap;
 use std::env;
@@ -34,13 +34,18 @@ use std::fs::File;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use docopt::Docopt;
+use futures::compat::Compat;
+use futures01::future::Future;
 use librcanary::*;
-use reqwest::header::{Authorization, Basic, Headers, UserAgent};
+
 use serde::Deserialize;
+
+const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
 rcanary
@@ -60,24 +65,8 @@ struct Args {
 }
 
 fn main() {
+    env::set_var("RUST_LOG", "rcanary=info,ws=info"); // TODO: use a proper logger
     env_logger::init().unwrap();
-
-    use futures::compat::{Compat};
-    use futures::prelude::FutureExt;
-
-    use self::checkengine::{Check, HttpTarget, HttpCheck};
-
-    let future03 = HttpCheck.check(HttpTarget {
-            url: "https://aibi.yshi.org".parse().unwrap(),
-        }).map(|x| {
-            println!("x = {:?}", x);
-            Ok(())
-        });
-
-    let future01 = Compat::new(future03);
-    tokio::run(future01);
-
-    return;
 
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
@@ -188,36 +177,95 @@ fn main() {
     }
 }
 
+fn async_blocking_run<F, I, E>(f: F) -> Result<F::Item, F::Error>
+where
+    F: Future<Item = I, Error = E> + Send + 'static,
+    F::Item: Send + 'static,
+    F::Error: Send + 'static,
+{
+    use std::sync::Mutex;
+
+    let out = Arc::new(Mutex::new(None));
+    let out_ok = Arc::clone(&out);
+    let out_err = Arc::clone(&out);
+
+    tokio::run(
+        f.map(move |i| {
+            let mut out = out_ok.lock().unwrap();
+            *out = Some(Ok(i));
+        })
+        .map_err(move |e| {
+            let mut out = out_err.lock().unwrap();
+            *out = Some(Err(e));
+        }),
+    );
+
+    let mut res = out.lock().unwrap();
+    res.take().unwrap()
+}
+
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
-    let mut headers = Headers::new();
-    headers.set(UserAgent::new("rcanary/0.5.0"));
-
-    if let Some(ref a) = target.basic_auth {
-        headers.set(Authorization(Basic {
-            username: a.username.clone(),
-            password: a.password.clone(),
-        }))
-    };
-
     let latency_timer = Instant::now();
-    let request = reqwest::Client::new().and_then(|r| r.get(&target.host));
 
-    let (need_to_alert, status, status_code) = match request {
-        Ok(mut request) => match request.headers(headers).send() {
-            Ok(ref r) if r.status().is_success() => (false, Status::Okay, r.status().to_string()),
-            Ok(ref r) => (true, Status::Fire, r.status().to_string()),
-            Err(err) => (
-                true,
-                Status::Unknown,
-                format!("failed to poll server: {}", err),
-            ),
-        },
-        Err(err) => (false, Status::Unknown, format!("bad URL: {}", err)),
+    if let Some(ref _a) = target.basic_auth {
+        unimplemented!("regression, we need to reimplement this");
     };
+
+    let http_check = HttpCheck {
+        latency_requirement: Duration::new(1, 0),
+    };
+
+    let need_to_alert;
+    let status;
+    let status_code;
+
+    let future03 = http_check.check(HttpTarget {
+        url: target.host.parse().unwrap(),
+    });
+    let future01 = Compat::new(future03);
+    let res = async_blocking_run(future01);
 
     let latency = latency_timer.elapsed();
     let nanos = u64::from(latency.subsec_nanos());
     let latency_ms = (1000 * 1000 * 1000 * latency.as_secs() + nanos) / (1000 * 1000);
+    
+    let ok = match res {
+        Ok(ok) => ok,
+        Err(err) => {
+            need_to_alert = true;
+            status = Status::Fire;
+            status_code = format!("failed to poll server: {}", err);
+
+            return CanaryCheck {
+                target: target.clone(),
+                time: format!("{}", time::now_utc().rfc3339()),
+                status,
+                status_code,
+                status_reason: "unimplemented".to_string(),
+                latency_ms,
+                alert: target.alert,
+                need_to_alert,
+            };
+        }
+    };
+
+    match ok.status() {
+        CheckStatus::Alive => {
+            need_to_alert = false;
+            status = Status::Okay;
+            status_code = format!("alive");
+        }
+        CheckStatus::Degraded => {
+            need_to_alert = true;
+            status = Status::Fire;
+            status_code = format!("degraded");
+        }
+        CheckStatus::Failed => {
+            need_to_alert = true;
+            status = Status::Unknown;
+            status_code = format!("failed");
+        }
+    }
 
     CanaryCheck {
         target: target.clone(),
