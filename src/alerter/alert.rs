@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
-use alerter::email::EmailAlerter;
-use alerter::Alerter;
+use super::email::EmailAlerter;
+use super::Alerter;
 
-use CanaryCheck;
-use CanaryConfig;
-use CanaryTarget;
-use Status;
+use crate::{CanaryCheck, CanaryConfig, CanaryTarget, Status};
 
 // Checks if alert would be spam.
 // Alert would be spam if state has not changed since last poll
@@ -39,7 +36,7 @@ pub fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), Str
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use tests::target;
+    use crate::tests::target;
     use {CanaryCheck, Status};
 
     fn okay_result() -> CanaryCheck {

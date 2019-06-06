@@ -1,10 +1,12 @@
-use librcanary::CanaryCheck;
-use librcanary::CanaryTargetTypes;
-use metrics::Metrics;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use prometheus::{Encoder, Gauge, Registry, TextEncoder};
+
+use librcanary::CanaryCheck;
+use librcanary::CanaryTargetTypes;
+
+use super::Metrics;
 
 lazy_static! {
     static ref GAUGES: Mutex<HashMap<String, Gauge>> = {

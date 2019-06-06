@@ -1,4 +1,4 @@
-use alerter::Alerter;
+use super::Alerter;
 use librcanary::{CanaryCheck, CanaryConfig, Status};
 
 use lettre::email::EmailBuilder;
