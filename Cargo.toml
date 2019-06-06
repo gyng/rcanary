@@ -32,5 +32,6 @@ http = "0.1"
 tokio = "*"
 native-tls = "0.2.2"
 hyper-tls = "0.3.2"
+base64 = "0.10"
 
 [workspace]

@@ -12,6 +12,7 @@ extern crate librcanary;
 extern crate reqwest;
 #[macro_use]
 extern crate prometheus;
+extern crate base64;
 extern crate serde;
 extern crate serde_json;
 extern crate time;
@@ -23,11 +24,11 @@ mod checkengine;
 mod metrics;
 mod ws_handler;
 
-use checkengine::{Check, CheckStatus, HttpCheck, HttpTarget};
+use checkengine::{Check, CheckResultElement, CheckStatus, HttpCheck, HttpTarget};
 use metrics::prometheus::PrometheusMetrics;
 use metrics::Metrics;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -41,6 +42,7 @@ use std::time::{Duration, Instant};
 use docopt::Docopt;
 use futures::compat::Compat;
 use futures01::future::Future;
+use hyper::header::AUTHORIZATION;
 use librcanary::*;
 
 use serde::Deserialize;
@@ -204,15 +206,52 @@ where
     res.take().unwrap()
 }
 
+fn format_status_codes(e: &[CheckResultElement]) -> String {
+    use std::io::Write;
+
+    let status_codes_uniq_sorted = e
+        .iter()
+        .map(|e| e.status_code())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    if status_codes_uniq_sorted.is_empty() {
+        return "no servers found".to_string();
+    }
+
+    let mut out_buf = Vec::new();
+    let mut iter = status_codes_uniq_sorted.iter();
+
+    write!(&mut out_buf, "{}", iter.next().unwrap()).unwrap();
+    for sc in iter {
+        write!(&mut out_buf, ", {}", sc).unwrap();
+    }
+
+    String::from_utf8(out_buf).unwrap()
+}
+
+pub fn header_from_basic_auth(auth: &Auth) -> String {
+    let mut raw_pair = auth.username.clone();
+    if let Some(ref pass) = auth.password {
+        raw_pair.push(':');
+        raw_pair.push_str(pass);
+    }
+
+    format!("Basic {}", base64::encode(&raw_pair))
+}
+
 fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let latency_timer = Instant::now();
 
-    if let Some(ref _a) = target.basic_auth {
-        unimplemented!("regression, we need to reimplement this");
+    let mut headers = Vec::new();
+    if let Some(ref a) = target.basic_auth {
+        headers.push((AUTHORIZATION, header_from_basic_auth(a)));
     };
 
     let http_check = HttpCheck {
         latency_requirement: Duration::new(1, 0),
+        allow_client_error: true,
     };
 
     let need_to_alert;
@@ -221,6 +260,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 
     let future03 = http_check.check(HttpTarget {
         url: target.host.parse().unwrap(),
+        extra_headers: headers,
     });
     let future01 = Compat::new(future03);
     let res = async_blocking_run(future01);
@@ -228,7 +268,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let latency = latency_timer.elapsed();
     let nanos = u64::from(latency.subsec_nanos());
     let latency_ms = (1000 * 1000 * 1000 * latency.as_secs() + nanos) / (1000 * 1000);
-    
+
     let ok = match res {
         Ok(ok) => ok,
         Err(err) => {
@@ -253,17 +293,14 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         CheckStatus::Alive => {
             need_to_alert = false;
             status = Status::Okay;
-            status_code = format!("alive");
         }
         CheckStatus::Degraded => {
             need_to_alert = true;
-            status = Status::Fire;
-            status_code = format!("degraded");
+            status = Status::Unknown;
         }
         CheckStatus::Failed => {
             need_to_alert = true;
-            status = Status::Unknown;
-            status_code = format!("failed");
+            status = Status::Fire;
         }
     }
 
@@ -271,7 +308,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
         target: target.clone(),
         time: format!("{}", time::now_utc().rfc3339()),
         status,
-        status_code,
+        status_code: format_status_codes(ok.elements()),
         status_reason: "unimplemented".to_string(),
         latency_ms,
         alert: target.alert,

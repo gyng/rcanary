@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use futures::compat::Future01CompatExt;
 use futures::future::{self, join_all, Future, FutureExt};
 
+use hyper::header::HeaderName;
 use hyper::Uri;
 use hyper_tls::HttpsConnector;
 use native_tls::{self, TlsConnector};
@@ -20,11 +21,13 @@ const CHECK_NAME: &str = "http";
 #[derive(Clone, Debug)]
 pub struct HttpTarget {
     pub url: Uri,
+    pub extra_headers: Vec<(HeaderName, String)>,
 }
 
 #[derive(Clone, Debug)]
 pub struct HttpCheck {
     pub latency_requirement: Duration,
+    pub allow_client_error: bool,
 }
 
 fn invalid_target_missing_value(
@@ -78,14 +81,14 @@ impl Check for HttpCheck {
         }
 
         let netloc = (authority.host().to_string(), port);
-        check_impl(self.clone(), netloc, target.url.clone()).boxed()
+        check_impl(self.clone(), netloc, target.clone()).boxed()
     }
 }
 
 async fn check_impl(
     check: HttpCheck,
     netloc: (String, u16),
-    url: Uri,
+    target: HttpTarget,
 ) -> Result<CheckResult, io::Error> {
     // Do DNS lookup.  Check fails if DNS fails.
     // FIXME/XXX: this is blocking.
@@ -96,14 +99,18 @@ async fn check_impl(
     let results: Vec<CheckResult> = join_all(
         addrs
             .into_iter()
-            .map(|s| connect_and_request(&check, s, url.clone())),
+            .map(|s| connect_and_request(&check, s, target.clone())),
     )
     .await;
 
     Ok(CheckResult::merge(results.into_iter()))
 }
 
-async fn connect_and_request(check: &HttpCheck, ip_addr: IpAddr, target: Uri) -> CheckResult {
+async fn connect_and_request(
+    check: &HttpCheck,
+    ip_addr: IpAddr,
+    target: HttpTarget,
+) -> CheckResult {
     use hyper::body::Body;
     use hyper::client::{Client, HttpConnector};
     use hyper::header::USER_AGENT;
@@ -119,8 +126,11 @@ async fn connect_and_request(check: &HttpCheck, ip_addr: IpAddr, target: Uri) ->
 
     let user_agent = format!("rcanary/{}", crate::CARGO_PKG_VERSION);
 
-    let mut request = Request::get(target);
+    let mut request = Request::get(target.url);
     request.header(USER_AGENT, user_agent);
+    for (k, v) in target.extra_headers {
+        request.header(k, v);
+    }
     let request = request.body(Body::empty()).unwrap();
 
     let client: Client<_> = Client::builder().build(connector);
@@ -142,7 +152,8 @@ async fn connect_and_request(check: &HttpCheck, ip_addr: IpAddr, target: Uri) ->
                 CHECK_NAME,
                 CheckResultElement {
                     target: ip_addr,
-                    status: CheckStatus::Failed,
+                    check_status: CheckStatus::Failed,
+                    status_code: 0,
                     err_msg: Some(format!("hyper error: {}", err)),
                     timeline,
                 },
@@ -167,24 +178,32 @@ async fn connect_and_request(check: &HttpCheck, ip_addr: IpAddr, target: Uri) ->
     });
 
     let status = resp.status();
-    if status.is_server_error() || status.is_client_error() {
+
+    let mut is_failed = status.is_server_error();
+    if !check.allow_client_error {
+        is_failed |= status.is_client_error();
+    }
+
+    if is_failed {
         return CheckResult::new(
             CHECK_NAME,
             CheckResultElement {
                 target: ip_addr,
-                status: CheckStatus::Failed,
+                check_status: CheckStatus::Failed,
+                status_code: status.as_u16(),
                 err_msg: Some(format!("bad HTTP status {}", status)),
                 timeline,
             },
         );
     }
 
-    let mut status = CheckStatus::Alive;
+    let mut check_status = CheckStatus::Alive;
+
     let mut err_msg = None;
 
     let total_latency = finish_time - conn_summary.start_time();
     if check.latency_requirement < total_latency {
-        status = CheckStatus::Degraded;
+        check_status = CheckStatus::Degraded;
         err_msg = Some(format!("High lantency: {:?}", total_latency));
     }
 
@@ -192,7 +211,8 @@ async fn connect_and_request(check: &HttpCheck, ip_addr: IpAddr, target: Uri) ->
         CHECK_NAME,
         CheckResultElement {
             target: ip_addr,
-            status,
+            check_status,
+            status_code: status.as_u16(),
             err_msg,
             timeline,
         },

@@ -9,7 +9,6 @@ mod http;
 mod tcp;
 
 pub use self::http::{HttpCheck, HttpTarget};
-// pub use self::tcp::TcpConnectCheck;
 
 pub trait Check {
     type Target: Clone;
@@ -48,9 +47,16 @@ impl fmt::Debug for CheckTimeSpan {
 #[derive(Debug)]
 pub struct CheckResultElement {
     target: IpAddr,
-    status: CheckStatus,
+    check_status: CheckStatus,
+    status_code: u16,
     err_msg: Option<String>,
     timeline: Vec<CheckTimeSpan>,
+}
+
+impl CheckResultElement {
+    pub fn status_code(&self) -> u16 {
+        self.status_code
+    }
 }
 
 #[derive(Debug)]
@@ -67,14 +73,18 @@ impl CheckResult {
         }
     }
 
+    pub fn elements(&self) -> &[CheckResultElement] {
+        &self.elements
+    }
+
     pub fn status(&self) -> CheckStatus {
         for e in &self.elements {
-            if e.status == CheckStatus::Failed {
+            if e.check_status == CheckStatus::Failed {
                 return CheckStatus::Failed;
             }
         }
         for e in &self.elements {
-            if e.status == CheckStatus::Degraded {
+            if e.check_status == CheckStatus::Degraded {
                 return CheckStatus::Degraded;
             }
         }
