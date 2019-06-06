@@ -43,6 +43,7 @@ use docopt::Docopt;
 use futures::compat::Compat;
 use futures01::future::Future;
 use hyper::header::AUTHORIZATION;
+use hyper::StatusCode;
 use librcanary::*;
 
 use serde::Deserialize;
@@ -211,7 +212,7 @@ fn format_status_codes(e: &[CheckResultElement]) -> String {
 
     let status_codes_uniq_sorted = e
         .iter()
-        .map(|e| e.status_code())
+        .map(|e| StatusCode::from_u16(e.status_code()).unwrap())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
@@ -223,7 +224,8 @@ fn format_status_codes(e: &[CheckResultElement]) -> String {
     let mut out_buf = Vec::new();
     let mut iter = status_codes_uniq_sorted.iter();
 
-    write!(&mut out_buf, "{}", iter.next().unwrap()).unwrap();
+    let sc = iter.next().unwrap();
+    write!(&mut out_buf, "{}", sc).unwrap();
     for sc in iter {
         write!(&mut out_buf, ", {}", sc).unwrap();
     }
@@ -272,8 +274,8 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let ok = match res {
         Ok(ok) => ok,
         Err(err) => {
-            need_to_alert = true;
-            status = Status::Fire;
+            need_to_alert = target.alert;
+            status = Status::Unknown;
             status_code = format!("failed to poll server: {}", err);
 
             return CanaryCheck {
@@ -295,11 +297,11 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
             status = Status::Okay;
         }
         CheckStatus::Degraded => {
-            need_to_alert = true;
+            need_to_alert = target.alert;
             status = Status::Unknown;
         }
         CheckStatus::Failed => {
-            need_to_alert = true;
+            need_to_alert = target.alert;
             status = Status::Fire;
         }
     }
@@ -469,7 +471,7 @@ mod tests {
             alert: false,
             latency_ms: actual.latency_ms,
             need_to_alert: false,
-            status_code: "bad URL: relative URL without a base".to_string(),
+            status_code: "failed to poll server: invalid target: URL invalid is missing a scheme".to_string(),
             status: Status::Unknown,
             status_reason: "unimplemented".to_string(),
             target: target(),

@@ -6,7 +6,6 @@ use std::time::Instant;
 use futures::future::Future;
 
 mod http;
-mod tcp;
 
 pub use self::http::{HttpCheck, HttpTarget};
 

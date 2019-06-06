@@ -36,7 +36,7 @@ pub fn send_alert(config: &CanaryConfig, result: &CanaryCheck) -> Result<(), Str
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use tests::target;
+    use crate::tests::target;
     use {CanaryCheck, Status};
 
     fn okay_result() -> CanaryCheck {
