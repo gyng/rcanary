@@ -204,7 +204,7 @@ async fn connect_and_request(
     let total_latency = finish_time - conn_summary.start_time();
     if check.latency_requirement < total_latency {
         check_status = CheckStatus::Degraded;
-        err_msg = Some(format!("High lantency: {:?}", total_latency));
+        err_msg = Some(format!("High latency: {:?}", total_latency));
     }
 
     CheckResult::new(
