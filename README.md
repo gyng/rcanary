@@ -162,6 +162,13 @@ some_target_latency_ms 125
 some_target_status 200
 ```
 
+## Development
+
+You might need SSL development libraries and Rust nightly.
+
+Make sure you also have the development packages of openssl installed.
+For example, `libssl-dev` on Ubuntu or `openssl-devel` on Fedora.
+
 # License
 
 MIT. See `LICENSE` for details.

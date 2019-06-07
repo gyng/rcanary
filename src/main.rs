@@ -469,7 +469,8 @@ mod tests {
             alert: false,
             latency_ms: actual.latency_ms,
             need_to_alert: false,
-            status_code: "failed to poll server: invalid target: URL invalid is missing a scheme".to_string(),
+            status_code: "failed to poll server: invalid target: URL invalid is missing a scheme"
+                .to_string(),
             status: Status::Unknown,
             status_reason: "unimplemented".to_string(),
             target: target(),

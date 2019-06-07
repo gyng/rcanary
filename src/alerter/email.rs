@@ -1,9 +1,11 @@
 use super::Alerter;
 use librcanary::{CanaryCheck, CanaryConfig, Status};
 
-use lettre::email::EmailBuilder;
-use lettre::transport::smtp::{SecurityLevel, SmtpTransportBuilder};
-use lettre::transport::EmailTransport;
+use lettre::smtp::authentication::{Credentials, Mechanism};
+use lettre::smtp::extension::ClientId;
+use lettre::smtp::ConnectionReuseParameters;
+use lettre::{SmtpClient, Transport};
+use lettre_email::Email;
 
 pub struct EmailAlerter<'a> {
     pub config: &'a CanaryConfig,
@@ -22,35 +24,27 @@ impl<'a> Alerter for EmailAlerter<'a> {
             None => return Err("email alerts configuration missing".to_string()),
         };
 
-        let email = match EmailBuilder::new()
+        let email = Email::builder()
             .to(&*email_config.alert_email)
             .from(&*email_config.smtp_username)
             .subject(&format!("rcanary alert for {}", &result.target.host))
-            .body(&body)
+            .text(&body)
             .build()
-        {
-            Ok(e) => e,
-            Err(err) => return Err(format!("{}", err)),
-        };
+            .unwrap();
 
-        let transport =
-            SmtpTransportBuilder::new((&*email_config.smtp_server, email_config.smtp_port));
-        let mut mailer = match transport {
-            Ok(t) => t
-                .hello_name("localhost")
-                .credentials(&email_config.smtp_username, &email_config.smtp_password)
-                .security_level(SecurityLevel::AlwaysEncrypt)
-                .smtp_utf8(true)
-                .build(),
-            Err(err) => {
-                return Err(format!(
-                    "failed to create email smtp transport for {} {}: {}",
-                    email_config.smtp_server, email_config.smtp_port, err
-                ))
-            }
-        };
+        let mut mailer = SmtpClient::new_simple(&*email_config.smtp_server)
+            .unwrap()
+            .hello_name(ClientId::Domain("localhost".to_string()))
+            .credentials(Credentials::new(
+                email_config.smtp_username.clone(),
+                email_config.smtp_password.clone(),
+            ))
+            .smtp_utf8(true)
+            .authentication_mechanism(Mechanism::Plain)
+            .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
+            .transport();
 
-        match mailer.send(email) {
+        match mailer.send(email.into()) {
             Ok(_) => {
                 info!(
                     "[alert.success] email alert sent to {} for {}",
