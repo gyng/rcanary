@@ -1,5 +1,4 @@
 #![feature(async_await)]
-#![recursion_limit = "128"]
 
 extern crate docopt;
 extern crate env_logger;
@@ -9,7 +8,6 @@ extern crate lettre;
 #[macro_use]
 extern crate log;
 extern crate librcanary;
-extern crate reqwest;
 #[macro_use]
 extern crate prometheus;
 extern crate base64;
@@ -318,7 +316,7 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     }
 }
 
-fn read_config(path: &str) -> Result<CanaryConfig, Box<Error>> {
+fn read_config(path: &str) -> Result<CanaryConfig, Box<dyn Error>> {
     info!("[status.startup] reading configuration from `{}`...", path);
     let mut file = File::open(&path)?;
     let mut config_toml = String::new();
