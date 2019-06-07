@@ -42,7 +42,6 @@ pub struct CanaryEmailAlertConfig {
     pub smtp_server: String,
     pub smtp_username: String,
     pub smtp_password: String,
-    pub smtp_port: u16,
 }
 
 impl Default for CanaryEmailAlertConfig {
@@ -52,7 +51,6 @@ impl Default for CanaryEmailAlertConfig {
             smtp_server: "".to_string(),
             smtp_username: "".to_string(),
             smtp_password: "".to_string(),
-            smtp_port: 0,
         }
     }
 }
