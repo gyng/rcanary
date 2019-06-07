@@ -47,14 +47,18 @@ impl fmt::Debug for CheckTimeSpan {
 pub struct CheckResultElement {
     target: IpAddr,
     check_status: CheckStatus,
-    status_code: u16,
+    status_code: Option<u16>,
     err_msg: Option<String>,
     timeline: Vec<CheckTimeSpan>,
 }
 
 impl CheckResultElement {
-    pub fn status_code(&self) -> u16 {
+    pub fn status_code(&self) -> Option<u16> {
         self.status_code
+    }
+
+    pub fn err_msg(&self) -> Option<String> {
+        self.err_msg.clone()
     }
 }
 

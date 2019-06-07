@@ -28,10 +28,10 @@ use metrics::prometheus::PrometheusMetrics;
 use metrics::Metrics;
 
 use std::collections::{BTreeSet, HashMap};
-use std::io;
 use std::env;
 use std::error::Error;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::mpsc;
@@ -270,17 +270,16 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
 
     let url = target.host.parse();
     if url.is_err() {
-        return 
-            CanaryCheck {
-                target: target.clone(),
-                time: format!("{}", time::now_utc().rfc3339()),
-                status: Status::Unknown,
-                status_code: "unknown".to_string(),
-                status_reason: "bad url".to_string(),
-                latency_ms: 0,
-                alert: target.alert,
-                need_to_alert: target.alert,
-            };
+        return CanaryCheck {
+            target: target.clone(),
+            time: format!("{}", time::now_utc().rfc3339()),
+            status: Status::Unknown,
+            status_code: "unknown".to_string(),
+            status_reason: "bad url".to_string(),
+            latency_ms: 0,
+            alert: target.alert,
+            need_to_alert: target.alert,
+        };
     }
 
     let future03 = http_check.check(HttpTarget {
