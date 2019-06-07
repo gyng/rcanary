@@ -11,7 +11,7 @@ test = true
 
 [dependencies]
 base64 = "0.10"
-docopt = "0.8.1"
+docopt = "1.0.2"
 env_logger = "0.4"
 futures-preview = { version = "=0.3.0-alpha.16", features = ["compat"] }
 futures01 = { package = "futures", version = "0.1" }
