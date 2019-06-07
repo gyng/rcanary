@@ -399,7 +399,6 @@ mod tests {
                     smtp_server: "smtp.googlemail.com".to_string(),
                     smtp_username: "example@gmail.com".to_string(),
                     smtp_password: "hunter2".to_string(),
-                    smtp_port: 587,
                 }),
             },
             metrics: Some(CanaryMetricsConfig {
