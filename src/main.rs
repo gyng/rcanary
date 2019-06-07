@@ -30,6 +30,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::env;
 use std::error::Error;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::mpsc;
@@ -205,12 +206,19 @@ where
     res.take().unwrap()
 }
 
+fn format_status_code(into: &mut dyn io::Write, status: u16) -> io::Result<()> {
+    match StatusCode::from_u16(status) {
+        Ok(sc) => write!(into, "{}", sc),
+        Err(_) => write!(into, "{} unknown status", status),
+    }
+}
+
 fn format_status_codes(e: &[CheckResultElement]) -> String {
     use std::io::Write;
 
     let status_codes_uniq_sorted = e
         .iter()
-        .map(|e| StatusCode::from_u16(e.status_code()).unwrap())
+        .map(|e| e.status_code())
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
@@ -223,9 +231,10 @@ fn format_status_codes(e: &[CheckResultElement]) -> String {
     let mut iter = status_codes_uniq_sorted.iter();
 
     let sc = iter.next().unwrap();
-    write!(&mut out_buf, "{}", sc).unwrap();
+    format_status_code(&mut out_buf, *sc).unwrap();
     for sc in iter {
-        write!(&mut out_buf, ", {}", sc).unwrap();
+        write!(&mut out_buf, ", ").unwrap();
+        format_status_code(&mut out_buf, *sc).unwrap();
     }
 
     String::from_utf8(out_buf).unwrap()
@@ -258,8 +267,22 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let status;
     let status_code;
 
+    let url = target.host.parse();
+    if url.is_err() {
+        return CanaryCheck {
+            target: target.clone(),
+            time: format!("{}", time::now_utc().rfc3339()),
+            status: Status::Unknown,
+            status_code: "unknown".to_string(),
+            status_reason: "bad url".to_string(),
+            latency_ms: 0,
+            alert: target.alert,
+            need_to_alert: target.alert,
+        };
+    }
+
     let future03 = http_check.check(HttpTarget {
-        url: target.host.parse().unwrap(),
+        url: url.unwrap(),
         extra_headers: headers,
     });
     let future01 = Compat::new(future03);
