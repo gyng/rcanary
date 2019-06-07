@@ -153,7 +153,7 @@ async fn connect_and_request(
                 CheckResultElement {
                     target: ip_addr,
                     check_status: CheckStatus::Failed,
-                    status_code: None,
+                    status_code: 0,
                     err_msg: Some(format!("hyper error: {}", err)),
                     timeline,
                 },
@@ -190,7 +190,7 @@ async fn connect_and_request(
             CheckResultElement {
                 target: ip_addr,
                 check_status: CheckStatus::Failed,
-                status_code: Some(status.as_u16()),
+                status_code: status.as_u16(),
                 err_msg: Some(format!("bad HTTP status {}", status)),
                 timeline,
             },
@@ -212,7 +212,7 @@ async fn connect_and_request(
         CheckResultElement {
             target: ip_addr,
             check_status,
-            status_code: Some(status.as_u16()),
+            status_code: status.as_u16(),
             err_msg,
             timeline,
         },
