@@ -216,6 +216,7 @@ fn format_status_code(into: &mut dyn io::Write, status: u16) -> io::Result<()> {
 fn format_status_codes(e: &[CheckResultElement]) -> String {
     use std::io::Write;
 
+    // the BTreeSet causes it to be unique and sorted.
     let status_codes_uniq_sorted = e
         .iter()
         .map(|e| e.status_code())
