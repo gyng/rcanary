@@ -1,4 +1,5 @@
 #![feature(async_await)]
+#![feature(result_map_or_else)]
 
 extern crate docopt;
 extern crate env_logger;
@@ -210,7 +211,16 @@ fn format_status_codes(e: &[CheckResultElement]) -> String {
 
     let status_codes_uniq_sorted = e
         .iter()
-        .map(|e| StatusCode::from_u16(e.status_code()).unwrap())
+        .map(|e| {
+            let code = e.status_code();
+
+            if let Some(code_unwrap) = code {
+                let code = StatusCode::from_u16(code_unwrap);
+                code.map_or_else(|err| err.to_string(), |ok| ok.to_string())
+            } else {
+                e.err_msg().unwrap_or("unknown check error".to_owned())
+            }
+        })
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
@@ -222,7 +232,7 @@ fn format_status_codes(e: &[CheckResultElement]) -> String {
     let mut out_buf = Vec::new();
     let mut iter = status_codes_uniq_sorted.iter();
 
-    let sc = iter.next().unwrap();
+    let sc = iter.next().unwrap();//.map_or(|err| err.to_string());
     write!(&mut out_buf, "{}", sc).unwrap();
     for sc in iter {
         write!(&mut out_buf, ", {}", sc).unwrap();
@@ -258,8 +268,24 @@ fn check_host(target: &CanaryTarget) -> CanaryCheck {
     let status;
     let status_code;
 
+    let url = target.host.parse();
+
+    if url.is_err() {
+        return 
+            CanaryCheck {
+                target: target.clone(),
+                time: format!("{}", time::now_utc().rfc3339()),
+                status: Status::Unknown,
+                status_code: "unknown".to_string(),
+                status_reason: "bad url".to_string(),
+                latency_ms: 0,
+                alert: target.alert,
+                need_to_alert: target.alert,
+            };
+    }
+
     let future03 = http_check.check(HttpTarget {
-        url: target.host.parse().unwrap(),
+        url: url.unwrap(),
         extra_headers: headers,
     });
     let future01 = Compat::new(future03);
