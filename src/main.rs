@@ -1,5 +1,4 @@
 #![feature(async_await)]
-#![feature(result_map_or_else)]
 
 extern crate docopt;
 extern crate env_logger;
