@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn it_checks_valid_target_hosts() {
-        static TEXT: &'static str = "I love BGP";
+        static TEXT: &str = "I love BGP";
         thread::spawn(move || {
             rouille::start_server("127.0.0.1:56473", move |_req| rouille::Response::text(TEXT));
         });
