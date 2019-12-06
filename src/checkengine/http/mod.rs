@@ -83,7 +83,7 @@ impl Check for HttpCheck {
         }
 
         let netloc = (authority.host().to_string(), port);
-        check_impl(self.clone(), netloc, target.clone()).boxed()
+        check_impl(self.clone(), netloc, target).boxed()
     }
 }
 

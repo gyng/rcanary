@@ -516,7 +516,7 @@ mod tests {
             status_code: "200 OK".to_string(),
             status: Status::Okay,
             status_reason: "unimplemented".to_string(),
-            target: ok_target.clone(),
+            target: ok_target,
             time: ok_actual.time.clone(),
         };
 
@@ -558,7 +558,7 @@ mod tests {
             status_code: "200 OK".to_string(),
             status: Status::Okay,
             status_reason: "unimplemented".to_string(),
-            target: ok_target.clone(),
+            target: ok_target,
             time: ok_actual.time.clone(),
         };
 
