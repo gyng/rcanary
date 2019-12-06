@@ -8,7 +8,6 @@ before_script:
   - rustup component add clippy
   - rustup component add rustfmt
 script:
-  - cargo clippy
   - cargo fmt --all -- --check
   # if you want the build job to fail when encountering warnings, use
   # - cargo clippy -- -D warnings
