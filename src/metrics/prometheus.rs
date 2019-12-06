@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use prometheus::{Encoder, Gauge, Registry, TextEncoder};
+use lazy_static::lazy_static;
+use prometheus::{opts, Encoder, Gauge, Registry, TextEncoder};
 
 use librcanary::CanaryCheck;
 use librcanary::CanaryTargetTypes;

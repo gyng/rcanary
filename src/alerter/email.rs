@@ -1,11 +1,12 @@
 use super::Alerter;
 use librcanary::{CanaryCheck, CanaryConfig, Status};
 
+use lettre::builder::Email;
 use lettre::smtp::authentication::{Credentials, Mechanism};
 use lettre::smtp::extension::ClientId;
 use lettre::smtp::ConnectionReuseParameters;
 use lettre::{SmtpClient, Transport};
-use lettre_email::Email;
+use log::info;
 
 pub struct EmailAlerter<'a> {
     pub config: &'a CanaryConfig,
@@ -30,7 +31,7 @@ impl<'a> Alerter for EmailAlerter<'a> {
             .subject(&format!("rcanary alert for {}", &result.target.host))
             .text(&body)
             .build()
-            .unwrap();
+            .map_err(|e| e.to_string())?;
 
         let mut mailer = SmtpClient::new_simple(&*email_config.smtp_server)
             .unwrap()
@@ -44,7 +45,7 @@ impl<'a> Alerter for EmailAlerter<'a> {
             .connection_reuse(ConnectionReuseParameters::ReuseUnlimited)
             .transport();
 
-        match mailer.send(email.into()) {
+        match mailer.send(email) {
             Ok(_) => {
                 info!(
                     "[alert.success] email alert sent to {} for {}",

@@ -11,6 +11,8 @@ use hyper::Uri;
 use hyper_tls::HttpsConnector;
 use native_tls::{self, TlsConnector};
 
+use log::debug;
+
 use super::{Check, CheckResult, CheckResultElement, CheckStatus, CheckTimeSpan};
 
 mod hyper_helpers;

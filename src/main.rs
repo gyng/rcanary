@@ -1,21 +1,6 @@
-#![feature(async_await)]
-
-extern crate docopt;
-extern crate env_logger;
-#[macro_use]
-extern crate lazy_static;
-extern crate lettre;
-#[macro_use]
-extern crate log;
-extern crate librcanary;
+// Crate is not updated properly for Rust 2018
 #[macro_use]
 extern crate prometheus;
-extern crate base64;
-extern crate serde;
-extern crate serde_json;
-extern crate time;
-extern crate toml;
-extern crate ws;
 
 mod alerter;
 mod checkengine;
@@ -44,6 +29,7 @@ use futures01::future::Future;
 use hyper::header::AUTHORIZATION;
 use hyper::StatusCode;
 use librcanary::*;
+use log::info;
 
 use serde::Deserialize;
 

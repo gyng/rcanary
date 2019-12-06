@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::email::EmailAlerter;
 use super::Alerter;
+use log::info;
 
 use crate::{CanaryCheck, CanaryConfig, CanaryTarget, Status};
 
