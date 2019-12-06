@@ -1,21 +1,6 @@
-#![feature(async_await)]
-
-extern crate docopt;
-extern crate env_logger;
-#[macro_use]
-extern crate lazy_static;
-extern crate lettre;
-#[macro_use]
-extern crate log;
-extern crate librcanary;
+// Crate is not updated properly for Rust 2018
 #[macro_use]
 extern crate prometheus;
-extern crate base64;
-extern crate serde;
-extern crate serde_json;
-extern crate time;
-extern crate toml;
-extern crate ws;
 
 mod alerter;
 mod checkengine;
@@ -44,6 +29,7 @@ use futures01::future::Future;
 use hyper::header::AUTHORIZATION;
 use hyper::StatusCode;
 use librcanary::*;
+use log::info;
 
 use serde::Deserialize;
 
@@ -505,7 +491,7 @@ mod tests {
 
     #[test]
     fn it_checks_valid_target_hosts() {
-        static TEXT: &'static str = "I love BGP";
+        static TEXT: &str = "I love BGP";
         thread::spawn(move || {
             rouille::start_server("127.0.0.1:56473", move |_req| rouille::Response::text(TEXT));
         });
@@ -530,7 +516,7 @@ mod tests {
             status_code: "200 OK".to_string(),
             status: Status::Okay,
             status_reason: "unimplemented".to_string(),
-            target: ok_target.clone(),
+            target: ok_target,
             time: ok_actual.time.clone(),
         };
 
@@ -572,7 +558,7 @@ mod tests {
             status_code: "200 OK".to_string(),
             status: Status::Okay,
             status_reason: "unimplemented".to_string(),
-            target: ok_target.clone(),
+            target: ok_target,
             time: ok_actual.time.clone(),
         };
 

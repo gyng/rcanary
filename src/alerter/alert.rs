@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::email::EmailAlerter;
 use super::Alerter;
+use log::info;
 
 use crate::{CanaryCheck, CanaryConfig, CanaryTarget, Status};
 
@@ -67,9 +68,9 @@ mod tests {
 
     #[test]
     fn it_marks_as_spam_on_empty_history() {
-        let mut last_statuses = HashMap::new();
+        let last_statuses = HashMap::new();
 
-        let actual = check_spam(&mut last_statuses, &okay_result());
+        let actual = check_spam(&last_statuses, &okay_result());
 
         assert_eq!(false, actual);
     }
@@ -79,7 +80,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Okay);
 
-        let actual = check_spam(&mut last_statuses, &fire_result());
+        let actual = check_spam(&last_statuses, &fire_result());
 
         assert_eq!(false, actual);
     }
@@ -89,7 +90,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Okay);
 
-        let actual = check_spam(&mut last_statuses, &okay_result());
+        let actual = check_spam(&last_statuses, &okay_result());
 
         assert_eq!(true, actual);
     }
@@ -99,7 +100,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Fire);
 
-        let actual = check_spam(&mut last_statuses, &fire_result());
+        let actual = check_spam(&last_statuses, &fire_result());
 
         assert_eq!(true, actual);
     }
@@ -109,7 +110,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Fire);
 
-        let actual = check_spam(&mut last_statuses, &okay_result());
+        let actual = check_spam(&last_statuses, &okay_result());
 
         assert_eq!(false, actual);
     }
@@ -119,7 +120,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Unknown);
 
-        let actual = check_spam(&mut last_statuses, &fire_result());
+        let actual = check_spam(&last_statuses, &fire_result());
 
         assert_eq!(false, actual);
     }
@@ -129,7 +130,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Unknown);
 
-        let actual = check_fixed(&mut last_statuses, &okay_result());
+        let actual = check_fixed(&last_statuses, &okay_result());
 
         assert_eq!(true, actual);
     }
@@ -139,7 +140,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Fire);
 
-        let actual = check_fixed(&mut last_statuses, &okay_result());
+        let actual = check_fixed(&last_statuses, &okay_result());
 
         assert_eq!(true, actual);
     }
@@ -149,7 +150,7 @@ mod tests {
         let mut last_statuses = HashMap::new();
         last_statuses.insert(target(), Status::Fire);
 
-        let actual = check_fixed(&mut last_statuses, &fire_result());
+        let actual = check_fixed(&last_statuses, &fire_result());
 
         assert_eq!(false, actual);
     }

@@ -11,6 +11,8 @@ use hyper::Uri;
 use hyper_tls::HttpsConnector;
 use native_tls::{self, TlsConnector};
 
+use log::debug;
+
 use super::{Check, CheckResult, CheckResultElement, CheckStatus, CheckTimeSpan};
 
 mod hyper_helpers;
@@ -81,7 +83,7 @@ impl Check for HttpCheck {
         }
 
         let netloc = (authority.host().to_string(), port);
-        check_impl(self.clone(), netloc, target.clone()).boxed()
+        check_impl(self.clone(), netloc, target).boxed()
     }
 }
 
