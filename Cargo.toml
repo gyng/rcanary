@@ -31,7 +31,7 @@ time = "0.1"
 tokio = "0.1"
 toml = "0.5"
 url = "1.7.2"
-ws = "0.8.1"
+ws = "0.9.1"
 protobuf = "2.6.1"
 
 [workspace]
