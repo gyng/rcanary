@@ -32,6 +32,6 @@ tokio = "0.1"
 toml = "0.5"
 url = "2.1.0"
 ws = "0.9.1"
-protobuf = "2.6.1"
+protobuf = "2.14.0"
 
 [workspace]
