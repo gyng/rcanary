@@ -1,7 +1,5 @@
 # rcanary
 
-[![Build Status](https://travis-ci.org/gyng/rcanary.svg?branch=master)](https://travis-ci.org/gyng/rcanary)
-
 A minimal program to monitor statuses of webpages, with super-basic logging and email alerts via SMTP. Also supports basic auth for HTTP targets and Prometheus metrics. rcanary exposes a websocket server for dashboards to connect to.
 
 # Usage
