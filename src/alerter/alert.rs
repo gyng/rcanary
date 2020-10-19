@@ -9,6 +9,7 @@ use crate::{CanaryCheck, CanaryConfig, CanaryTarget, Status};
 // Checks if alert would be spam.
 // Alert would be spam if state has not changed since last poll
 pub fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
+    #[allow(clippy::match_like_matches_macro)]
     match last_statuses.get(&result.target) {
         Some(status) => status == &result.status,
         _ => false,
@@ -16,6 +17,7 @@ pub fn check_spam(last_statuses: &HashMap<CanaryTarget, Status>, result: &Canary
 }
 
 pub fn check_fixed(last_statuses: &HashMap<CanaryTarget, Status>, result: &CanaryCheck) -> bool {
+    #[allow(clippy::match_like_matches_macro)]
     match (last_statuses.get(&result.target), &result.status) {
         (Some(&Status::Fire), &Status::Okay) | (Some(&Status::Unknown), &Status::Okay) => true,
         _ => false,
